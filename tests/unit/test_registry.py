@@ -93,3 +93,13 @@ def test_monitoring_category_has_expected_checks_and_out_of_scope():
     assert check_ids == {"10.01", "10.02", "10.03"}
     assert monitoring.applicability is None
     assert any("10.04" in note for note in monitoring.out_of_scope)
+
+
+def test_documentation_category_has_expected_checks_and_out_of_scope():
+    categories = {c.number: c for c in registry.discover_categories()}
+    documentation = categories[11]
+    assert documentation.name == "Documentation & Institutional Knowledge"
+    check_ids = {c.id for c in documentation.checks}
+    assert check_ids == {"11.01", "11.02", "11.03"}
+    assert documentation.applicability is None
+    assert any("11.04" in note for note in documentation.out_of_scope)
