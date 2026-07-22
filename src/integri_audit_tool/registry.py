@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import importlib
 import pkgutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable
 
 import psycopg
@@ -41,6 +41,10 @@ class CategoryModule:
     name: str
     checks: list[Check]
     applicability: Callable[[psycopg.Connection], bool] | None = None
+    out_of_scope: list[str] = field(default_factory=list)
+    """Rubric bullets this category can never assess via a read-only DB connection —
+    e.g. UI/frontend logic — as distinct from bullets that are merely not yet
+    implemented. Surfaced in the report's Out of Scope section alongside category 12."""
 
 
 def discover_categories() -> list[CategoryModule]:
