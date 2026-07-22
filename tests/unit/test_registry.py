@@ -53,3 +53,13 @@ def test_data_quality_category_has_expected_checks():
     check_ids = {c.id for c in data_quality.checks}
     assert check_ids == {"06.01", "06.03", "06.04", "06.05", "06.06"}
     assert data_quality.applicability is None
+
+
+def test_scale_readiness_category_has_all_5_checks():
+    categories = {c.number: c for c in registry.discover_categories()}
+    scale_readiness = categories[7]
+    assert scale_readiness.name == "Scale & Growth Readiness"
+    check_ids = {c.id for c in scale_readiness.checks}
+    assert check_ids == {"07.01", "07.02", "07.03", "07.04", "07.05"}
+    assert scale_readiness.applicability is None
+    assert scale_readiness.out_of_scope == []
