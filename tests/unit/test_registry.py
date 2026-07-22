@@ -44,3 +44,12 @@ def test_query_patterns_category_has_expected_checks_and_out_of_scope():
     out_of_scope_text = " ".join(query_patterns.out_of_scope)
     assert "05.02" in out_of_scope_text
     assert "05.05" in out_of_scope_text
+
+
+def test_data_quality_category_has_expected_checks():
+    categories = {c.number: c for c in registry.discover_categories()}
+    data_quality = categories[6]
+    assert data_quality.name == "Data Quality & Integrity"
+    check_ids = {c.id for c in data_quality.checks}
+    assert check_ids == {"06.01", "06.03", "06.04", "06.05", "06.06"}
+    assert data_quality.applicability is None
