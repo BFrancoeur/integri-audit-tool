@@ -83,3 +83,13 @@ def test_backup_recovery_category_has_all_4_checks():
     assert check_ids == {"09.01", "09.02", "09.03", "09.04"}
     assert backup_recovery.applicability is None
     assert backup_recovery.out_of_scope == []
+
+
+def test_monitoring_category_has_expected_checks_and_out_of_scope():
+    categories = {c.number: c for c in registry.discover_categories()}
+    monitoring = categories[10]
+    assert monitoring.name == "Monitoring & Observability"
+    check_ids = {c.id for c in monitoring.checks}
+    assert check_ids == {"10.01", "10.02", "10.03"}
+    assert monitoring.applicability is None
+    assert any("10.04" in note for note in monitoring.out_of_scope)
