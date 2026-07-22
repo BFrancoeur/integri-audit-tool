@@ -73,3 +73,13 @@ def test_security_boundaries_category_has_expected_checks_and_out_of_scope():
     assert check_ids == {"08.01", "08.02", "08.04", "08.05", "08.06"}
     assert security.applicability is None
     assert any("08.03" in note for note in security.out_of_scope)
+
+
+def test_backup_recovery_category_has_all_4_checks():
+    categories = {c.number: c for c in registry.discover_categories()}
+    backup_recovery = categories[9]
+    assert backup_recovery.name == "Backup, Recovery & Change Management"
+    check_ids = {c.id for c in backup_recovery.checks}
+    assert check_ids == {"09.01", "09.02", "09.03", "09.04"}
+    assert backup_recovery.applicability is None
+    assert backup_recovery.out_of_scope == []
