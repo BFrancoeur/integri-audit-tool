@@ -32,3 +32,15 @@ def test_fulltext_search_category_has_expected_checks_and_applicability():
     assert check_ids == {"04.01", "04.02", "04.03", "04.04", "04.05"}
     assert fulltext_search.applicability is not None
     assert any("04.06" in note for note in fulltext_search.out_of_scope)
+
+
+def test_query_patterns_category_has_expected_checks_and_out_of_scope():
+    categories = {c.number: c for c in registry.discover_categories()}
+    query_patterns = categories[5]
+    assert query_patterns.name == "Query Patterns & Application Interaction"
+    check_ids = {c.id for c in query_patterns.checks}
+    assert check_ids == {"05.01", "05.03", "05.04", "05.06"}
+    assert query_patterns.applicability is None
+    out_of_scope_text = " ".join(query_patterns.out_of_scope)
+    assert "05.02" in out_of_scope_text
+    assert "05.05" in out_of_scope_text
