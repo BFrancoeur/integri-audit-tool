@@ -13,3 +13,12 @@ def test_indexing_strategy_category_has_expected_checks():
     assert indexing.name == "Indexing Strategy"
     check_ids = {c.id for c in indexing.checks}
     assert check_ids == {"03.01", "03.02", "03.04"}
+
+
+def test_jsonb_governance_category_has_expected_checks_and_applicability():
+    categories = {c.number: c for c in registry.discover_categories()}
+    jsonb_governance = categories[2]
+    assert jsonb_governance.name == "JSONB Structure & Governance"
+    check_ids = {c.id for c in jsonb_governance.checks}
+    assert check_ids == {"02.02", "02.03", "02.04"}
+    assert jsonb_governance.applicability is not None
