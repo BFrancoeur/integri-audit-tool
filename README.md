@@ -30,7 +30,31 @@ Findings are produced in the audit phase only — read-only, no writes. Remediat
 
 ## Usage
 
-_TBD — usage instructions will be added here as the tool is built out._
+Requires [`uv`](https://docs.astral.sh/uv/) and Python 3.11+ (uv provisions the interpreter automatically).
+
+```bash
+uv sync --group dev            # install runtime + dev dependencies
+uv run integri-audit --dsn "postgresql://user:pass@host:5432/dbname"
+uv run integri-audit --dsn "$INTEGRI_DSN" --output report.md      # write to a file instead of stdout
+uv run integri-audit --dsn "$INTEGRI_DSN" -c 3 -c 6                # limit to specific rubric category numbers
+```
+
+The DSN can also be supplied via the `INTEGRI_DSN` environment variable instead of `--dsn`. The tool connects read-only and never writes to the audited database.
+
+Run the tests:
+
+```bash
+uv run pytest                  # unit tests (fast, no DB required)
+uv run pytest -m integration   # + integration tests against a real Postgres (requires Docker)
+```
+
+## Architecture
+
+- **Core** (`src/integri_audit_tool/`) — CLI entrypoint (`cli.py`), read-only DB connection handling (`db.py`), the `Finding`/`Severity`/`AuditReport` data model (`models.py`), dynamic category discovery (`registry.py`), audit orchestration (`runner.py`), and the Markdown report renderer (`report/markdown.py`).
+- **Categories** (`src/integri_audit_tool/categories/`) — one package per rubric category, folder-named to mirror the rubric heading (e.g. `03_indexing_strategy` ↔ rubric section "3. Indexing Strategy"). Each exports a `CATEGORY` object the registry discovers automatically — no central list to maintain. Default granularity is one function per rubric checklist bullet; a category only gets extra files (e.g. splitting `queries.py` raw SQL from `checks.py` interpretation logic) when it's complex enough to need it.
+- Category folders start with a zero-padded number and are therefore not valid Python identifiers as literal `import` targets — this is intentional and safe, since they're only ever loaded dynamically via `importlib` (see `registry.py`), the same pattern Django uses for migration files (`0001_initial.py`).
+- Only **Indexing Strategy** (category 3) is fully implemented so far (3 of its 7 rubric bullets), as the worked example proving the pattern end-to-end. The other 10 categories exist as stub packages (`CATEGORY` with an empty `checks` list) ready to be filled in the same way, incrementally.
+- Category 12 (Compliance & Data Privacy) is never a discovered module — it's a static "out of scope" note the report renderer always includes.
 
 ## Notes
 
