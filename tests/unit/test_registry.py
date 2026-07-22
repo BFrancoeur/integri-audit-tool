@@ -63,3 +63,13 @@ def test_scale_readiness_category_has_all_5_checks():
     assert check_ids == {"07.01", "07.02", "07.03", "07.04", "07.05"}
     assert scale_readiness.applicability is None
     assert scale_readiness.out_of_scope == []
+
+
+def test_security_boundaries_category_has_expected_checks_and_out_of_scope():
+    categories = {c.number: c for c in registry.discover_categories()}
+    security = categories[8]
+    assert security.name == "Security & Access Boundaries"
+    check_ids = {c.id for c in security.checks}
+    assert check_ids == {"08.01", "08.02", "08.04", "08.05", "08.06"}
+    assert security.applicability is None
+    assert any("08.03" in note for note in security.out_of_scope)
