@@ -61,3 +61,63 @@ def test_fetch_tsvector_columns_without_sync_mechanism_distinguishes_generated_c
 
     assert any(r["table_name"] == "c4_sync_manual" for r in rows)
     assert not any(r["table_name"] == "c4_sync_generated" for r in rows)
+
+
+@pytest.fixture(autouse=True)
+def _enable_pg_stat_statements(pg_conn):
+    with pg_conn.cursor() as cur:
+        cur.execute("CREATE EXTENSION IF NOT EXISTS pg_stat_statements")
+
+
+def test_is_pg_stat_statements_available_true_once_extension_created(pg_conn):
+    assert queries.is_pg_stat_statements_available(pg_conn) is True
+
+
+def test_fetch_freetext_and_structured_combination_stats_detects_combined_query(pg_conn):
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            "CREATE TABLE c4_stat_combined (id serial PRIMARY KEY, body text, attrs jsonb, "
+            "sv tsvector GENERATED ALWAYS AS (to_tsvector('english', body)) STORED)"
+        )
+        cur.execute("SELECT * FROM c4_stat_combined WHERE sv @@ plainto_tsquery('foo')")
+        cur.execute(
+            "SELECT * FROM c4_stat_combined WHERE sv @@ plainto_tsquery('foo') "
+            "AND attrs @> '{\"active\": true}'"
+        )
+
+    stats = queries.fetch_freetext_and_structured_combination_stats(pg_conn)
+
+    assert stats["freetext_statement_count"] >= 2
+    assert stats["combined_statement_count"] >= 1
+
+
+def test_fetch_freetext_ranking_stats_detects_ts_rank_usage(pg_conn):
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            "CREATE TABLE c4_stat_ranked (id serial PRIMARY KEY, body text, "
+            "sv tsvector GENERATED ALWAYS AS (to_tsvector('english', body)) STORED)"
+        )
+        cur.execute(
+            "SELECT id, ts_rank(sv, plainto_tsquery('foo')) FROM c4_stat_ranked "
+            "WHERE sv @@ plainto_tsquery('foo')"
+        )
+
+    stats = queries.fetch_freetext_ranking_stats(pg_conn)
+
+    assert stats["freetext_statement_count"] >= 1
+    assert stats["ranked_statement_count"] >= 1
+
+
+def test_fetch_raw_tsquery_usage_flags_raw_call_and_excludes_safe_wrappers(pg_conn):
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            "CREATE TABLE c4_stat_rawquery (id serial PRIMARY KEY, body text, "
+            "sv tsvector GENERATED ALWAYS AS (to_tsvector('english', body)) STORED)"
+        )
+        cur.execute("SELECT * FROM c4_stat_rawquery WHERE sv @@ to_tsquery('foo & bar')")
+        cur.execute("SELECT * FROM c4_stat_rawquery WHERE sv @@ websearch_to_tsquery('foo bar')")
+
+    stats = queries.fetch_raw_tsquery_usage(pg_conn)
+
+    assert stats["raw_tsquery_statement_count"] >= 1
+    assert not any("websearch_to_tsquery" in q for q in (stats["example_queries"] or []))

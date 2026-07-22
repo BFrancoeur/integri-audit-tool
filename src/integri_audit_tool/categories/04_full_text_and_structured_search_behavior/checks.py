@@ -79,3 +79,123 @@ def check_tsvector_sync_mechanism(conn: psycopg.Connection, config: AuditConfig)
             )
         )
     return findings
+
+
+def _pg_stat_statements_unavailable_finding(check_id: str, bullet_summary: str) -> Finding:
+    return Finding(
+        category_number=_CATEGORY_NUMBER,
+        category_name=_CATEGORY_NAME,
+        check_id=check_id,
+        title=f"Could not assess ({bullet_summary}): pg_stat_statements is not installed",
+        severity=Severity.INFORMATIONAL,
+        observation=(
+            "The pg_stat_statements extension is not installed/enabled on this database, so the actual "
+            "SQL text the application runs isn't available to inspect for this bullet."
+        ),
+        evidence="Checked via pg_extension.",
+        business_impact="This aspect of search behavior can't be assessed without pg_stat_statements.",
+        recommended_direction=(
+            "Enable pg_stat_statements (requires adding it to shared_preload_libraries and a restart, "
+            "then CREATE EXTENSION pg_stat_statements) so a future audit can assess this."
+        ),
+    )
+
+
+def check_combined_structured_and_freetext_queries(
+    conn: psycopg.Connection, config: AuditConfig
+) -> list[Finding]:
+    """Rubric 04.03 — are structured (JSONB) filters and free-text search combined in the same query?"""
+    if not queries.is_pg_stat_statements_available(conn):
+        return [_pg_stat_statements_unavailable_finding("04.03", "structured + free-text composition")]
+
+    stats = queries.fetch_freetext_and_structured_combination_stats(conn)
+    if stats["freetext_statement_count"] == 0 or stats["combined_statement_count"] > 0:
+        return []
+
+    return [
+        Finding(
+            category_number=_CATEGORY_NUMBER,
+            category_name=_CATEGORY_NAME,
+            check_id="04.03",
+            title="Free-text search and JSONB structured filters appear to be separate query paths",
+            severity=Severity.LOW,
+            observation=(
+                f"pg_stat_statements shows {stats['freetext_statement_count']} observed statement(s) using "
+                "free-text search (@@), none of which also use JSONB containment (@>) in the same statement."
+            ),
+            evidence="Counted via ILIKE pattern matching over pg_stat_statements.query (statements visible to this role only).",
+            business_impact=(
+                "If structured filtering and free-text search are applied as two separate, un-composed "
+                "queries, the application is likely doing extra round-trips or filtering in application "
+                "code instead of letting Postgres plan a single combined query."
+            ),
+            recommended_direction=(
+                "Where a search genuinely needs both, express it as one query so the planner can use the "
+                "GIN index on the tsvector and any JSONB indexes together."
+            ),
+        )
+    ]
+
+
+def check_relevance_ranking(conn: psycopg.Connection, config: AuditConfig) -> list[Finding]:
+    """Rubric 04.04 — does search relevance ranking (ts_rank or equivalent) exist?"""
+    if not queries.is_pg_stat_statements_available(conn):
+        return [_pg_stat_statements_unavailable_finding("04.04", "relevance ranking")]
+
+    stats = queries.fetch_freetext_ranking_stats(conn)
+    if stats["freetext_statement_count"] == 0 or stats["ranked_statement_count"] > 0:
+        return []
+
+    return [
+        Finding(
+            category_number=_CATEGORY_NUMBER,
+            category_name=_CATEGORY_NAME,
+            check_id="04.04",
+            title="Free-text search queries found with no relevance ranking",
+            severity=Severity.LOW,
+            observation=(
+                f"pg_stat_statements shows {stats['freetext_statement_count']} observed free-text search "
+                "statement(s) (@@), none of which call ts_rank()/ts_rank_cd()."
+            ),
+            evidence="Counted via ILIKE pattern matching over pg_stat_statements.query (statements visible to this role only).",
+            business_impact="Without relevance ranking, search results are likely unordered or arbitrarily ordered.",
+            recommended_direction="Add ts_rank()/ts_rank_cd() to order results by relevance where free-text search is used.",
+        )
+    ]
+
+
+def check_safe_tsquery_parsing(conn: psycopg.Connection, config: AuditConfig) -> list[Finding]:
+    """Rubric 04.05 — is query input handled through websearch_to_tsquery rather than raw to_tsquery?"""
+    if not queries.is_pg_stat_statements_available(conn):
+        return [_pg_stat_statements_unavailable_finding("04.05", "safe tsquery parsing")]
+
+    stats = queries.fetch_raw_tsquery_usage(conn)
+    if stats["raw_tsquery_statement_count"] == 0:
+        return []
+
+    examples = "; ".join(stats["example_queries"] or [])
+    return [
+        Finding(
+            category_number=_CATEGORY_NUMBER,
+            category_name=_CATEGORY_NAME,
+            check_id="04.05",
+            title="Raw to_tsquery() usage found without websearch_to_tsquery/plainto_tsquery",
+            severity=Severity.MEDIUM,
+            observation=(
+                f"pg_stat_statements shows {stats['raw_tsquery_statement_count']} observed statement(s) "
+                "calling to_tsquery() directly, without going through websearch_to_tsquery() or "
+                "plainto_tsquery(). Can't confirm from SQL text alone whether the argument originates "
+                "from user-supplied search terms."
+            ),
+            evidence=f"Example statement(s) (truncated): {examples}" if examples else "See pg_stat_statements.",
+            business_impact=(
+                "Raw to_tsquery() requires already-valid tsquery syntax (&, |, !, parentheses) — if "
+                "user-supplied search terms reach it directly, malformed input (e.g. an unbalanced "
+                "operator) raises a hard error instead of degrading gracefully."
+            ),
+            recommended_direction=(
+                "If this argument comes from user input, switch to websearch_to_tsquery() (or "
+                "plainto_tsquery() for simpler needs), which parse free-form text safely."
+            ),
+        )
+    ]

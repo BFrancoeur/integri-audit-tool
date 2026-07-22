@@ -1,11 +1,12 @@
 """Rubric category 4: Full-Text & Structured Search Behavior.
 
-2 of the rubric's 6 checklist bullets are implemented (04.01, 04.02). The
-other four (04.03 combining structured+free-text filters efficiently, 04.04
-relevance ranking, 04.05 safe query parsing via websearch_to_tsquery, 04.06
-facets matching governed attributes) live in application/query code, not the
-database — a read-only DB connection can't see how search queries are built
-or how UI facets are populated, so they aren't automatable here.
+5 of the rubric's 6 checklist bullets are implemented. 04.01/04.02 come from
+catalog metadata; 04.03/04.04/04.05 come from pg_stat_statements (the actual
+SQL text the application has run), since those bullets describe query-code
+behavior invisible to schema introspection alone — each degrades gracefully
+to an Informational finding if the extension isn't installed. Only 04.06
+(facets generated dynamically vs hardcoded) stays out of scope: that's
+UI/frontend logic, which no read-only Postgres connection can see.
 
 Uses `applicability`: a database with no tsvector columns at all makes this
 whole category N/A, per the rubric's own guidance to skip full-text search
@@ -30,6 +31,21 @@ CATEGORY = CategoryModule(
             id="04.02",
             description="Is the tsvector kept in sync via a generated column or trigger, not manually maintained?",
             fn=checks.check_tsvector_sync_mechanism,
+        ),
+        Check(
+            id="04.03",
+            description="Are structured filters (JSONB containment) and free-text search combined efficiently in the same query?",
+            fn=checks.check_combined_structured_and_freetext_queries,
+        ),
+        Check(
+            id="04.04",
+            description="Does search relevance ranking (ts_rank or equivalent) exist?",
+            fn=checks.check_relevance_ranking,
+        ),
+        Check(
+            id="04.05",
+            description="Is query input handled through websearch_to_tsquery rather than raw string concatenation into tsquery?",
+            fn=checks.check_safe_tsquery_parsing,
         ),
     ],
 )

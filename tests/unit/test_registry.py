@@ -29,5 +29,5 @@ def test_fulltext_search_category_has_expected_checks_and_applicability():
     fulltext_search = categories[4]
     assert fulltext_search.name == "Full-Text & Structured Search Behavior"
     check_ids = {c.id for c in fulltext_search.checks}
-    assert check_ids == {"04.01", "04.02"}
+    assert check_ids == {"04.01", "04.02", "04.03", "04.04", "04.05"}
     assert fulltext_search.applicability is not None

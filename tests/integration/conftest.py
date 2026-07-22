@@ -13,8 +13,14 @@ from testcontainers.postgres import PostgresContainer
 
 @pytest.fixture(scope="session")
 def postgres_container():
-    with PostgresContainer("postgres:16-alpine") as container:
-        yield container
+    # shared_preload_libraries is required for pg_stat_statements (category 4's
+    # pg_stat_statements-based checks) — it can't be loaded via CREATE EXTENSION
+    # alone, only at server start. Harmless for every other category's tests.
+    container = PostgresContainer("postgres:16-alpine").with_command(
+        "postgres -c shared_preload_libraries=pg_stat_statements -c pg_stat_statements.track=all"
+    )
+    with container as started:
+        yield started
 
 
 @pytest.fixture
