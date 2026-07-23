@@ -18,11 +18,22 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from rich.console import Console
+from rich.markup import escape
 from rich.progress import BarColumn, Progress, TaskID, TextColumn
+
+from integri_audit_tool.models import Severity
 
 if TYPE_CHECKING:
     from integri_audit_tool.models import AuditReport, CategoryResult, Finding
     from integri_audit_tool.registry import Check, CategoryModule
+
+_SEVERITY_STYLES = {
+    Severity.CRITICAL: "bold red",
+    Severity.HIGH: "red",
+    Severity.MEDIUM: "yellow",
+    Severity.LOW: "cyan",
+    Severity.INFORMATIONAL: "dim",
+}
 
 # Mirrors scripts/aliases.sh — kept here rather than derived from it since
 # that's a shell file, not something Python can introspect. Falls back to
@@ -45,7 +56,9 @@ _CATEGORY_ALIASES = {
 
 class CliProgressReporter:
     """Concrete AuditReporter: readiness messages, a per-category progress bar,
-    green checkmarks / red X's per check, and errors logged to logs/*.log.
+    green checkmarks / red X's per check with each check's findings (severity +
+    title) listed underneath so what was actually found is visible live, not
+    just a count, and errors logged to logs/*.log.
     """
 
     def __init__(self, logs_dir: Path | str = "logs") -> None:
@@ -100,6 +113,11 @@ class CliProgressReporter:
         self, category: "CategoryModule", check: "Check", findings: list["Finding"]
     ) -> None:
         self._console.print(f"[green]✓ {check.id} passed[/green] ({len(findings)} finding(s))")
+        for finding in findings:
+            style = _SEVERITY_STYLES.get(finding.severity, "")
+            self._console.print(
+                f"    [{style}][{finding.severity.value}][/{style}] {escape(finding.title)}"
+            )
         self._advance(category)
 
     def check_failed(self, category: "CategoryModule", check: "Check", error: Exception) -> None:

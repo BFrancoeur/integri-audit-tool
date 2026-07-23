@@ -1,5 +1,5 @@
 from integri_audit_tool.cli_progress_reporter import CliProgressReporter
-from integri_audit_tool.models import CategoryResult
+from integri_audit_tool.models import CategoryResult, Finding, Severity
 from integri_audit_tool.registry import Check, CategoryModule
 
 
@@ -13,6 +13,17 @@ def _check(check_id="01.01"):
 
 def _result(number=1, status="completed"):
     return CategoryResult(category_number=number, category_name="Test Category", status=status)
+
+
+def _finding(title="Something found", severity=Severity.MEDIUM, check_id="01.01"):
+    return Finding(
+        category_number=1,
+        category_name="Test Category",
+        check_id=check_id,
+        title=title,
+        severity=severity,
+        observation="obs",
+    )
 
 
 def test_check_failed_writes_log_file(tmp_path):
@@ -98,6 +109,55 @@ def test_category_completed_prints_nothing_for_not_applicable(tmp_path, capsys):
     reporter.category_completed(category, _result(number=1, status="not_applicable"))
 
     assert "ia-schema completed" not in capsys.readouterr().err
+
+
+def test_check_succeeded_prints_each_finding_severity_and_title(tmp_path, capsys):
+    reporter = CliProgressReporter(logs_dir=tmp_path / "logs")
+    category = _category(checks=[_check()])
+    check = _check()
+    findings = [
+        _finding(title="High severity thing", severity=Severity.HIGH),
+        _finding(title="Low severity thing", severity=Severity.LOW),
+    ]
+
+    reporter.category_ready(category, [check])
+    reporter.check_started(category, check)
+    reporter.check_succeeded(category, check, findings)
+
+    out = capsys.readouterr().err
+    assert "High severity thing" in out
+    assert "[High]" in out
+    assert "Low severity thing" in out
+    assert "[Low]" in out
+
+
+def test_check_succeeded_prints_nothing_extra_when_no_findings(tmp_path, capsys):
+    reporter = CliProgressReporter(logs_dir=tmp_path / "logs")
+    category = _category(checks=[_check()])
+    check = _check()
+
+    reporter.category_ready(category, [check])
+    reporter.check_started(category, check)
+    reporter.check_succeeded(category, check, [])
+
+    out = capsys.readouterr().err
+    assert "✓ 01.01 passed (0 finding(s))" in out
+
+
+def test_check_succeeded_escapes_markup_characters_in_finding_titles(tmp_path, capsys):
+    """A title containing literal square brackets must not be interpreted as rich
+    markup (which could garble output or raise a MarkupError) — e.g. a title that
+    happens to embed a Python list repr like "['a', 'b']"."""
+    reporter = CliProgressReporter(logs_dir=tmp_path / "logs")
+    category = _category(checks=[_check()])
+    check = _check()
+    finding = _finding(title="Drift for ['a', 'b']")
+
+    reporter.category_ready(category, [check])
+    reporter.check_started(category, check)
+    reporter.check_succeeded(category, check, [finding])  # must not raise
+
+    assert "Drift for ['a', 'b']" in capsys.readouterr().err
 
 
 def test_audit_completed_no_longer_prints_its_own_banner(tmp_path, capsys):
