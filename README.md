@@ -88,7 +88,27 @@ Integri Audit Tool — per-category aliases (each forwards extra args to 'integr
   ia-backup   9. Backup, Recovery & Change Management
   ia-mon      10. Monitoring & Observability
   ia-docs     11. Documentation & Institutional Knowledge
+
+  ia-db-up    Set up/reuse the synthetic test database
+  ia-db-down  Tear down the synthetic test database
 ```
+
+### Trying it out against a synthetic database
+
+`scripts/setup-synthetic-db.sh` spins up a persistent, local Postgres container (`integri-synthetic-db`, port 55432) seeded from `scripts/synthetic-db/seed.sql` with a deliberately messy, client-shaped schema — a `customers`/`orders`/`products`/`sessions` set of tables that intentionally reproduces a specific rubric anti-pattern per bullet (an FK-shaped column with no constraint, JSONB key/type drift, an unused index, a table with no primary key, RLS enabled with zero policies, an unvalidated FK, TOASTed JSONB, dead-tuple bloat with autovacuum disabled, and more), plus a burst of generated query traffic so the `pg_stat_statements`-backed checks (N+1 candidates, OFFSET pagination, slow queries) have something real to find too. It's meant for exercising checks by hand, repeatedly, without needing a real client database:
+
+```bash
+./scripts/setup-synthetic-db.sh              # create if missing, else reuse as-is
+./scripts/setup-synthetic-db.sh --recreate   # wipe and rebuild from scratch
+# or: ia-db-up
+
+export INTEGRI_DSN="postgresql://postgres:synthetic@localhost:55432/synthetic_client"
+ia-schema            # or any other ia-* alias / run-check.sh / run-category.sh
+
+./scripts/teardown-synthetic-db.sh   # or: ia-db-down
+```
+
+A full run against it currently surfaces genuine findings in every automated category (1–11) — confirmed via manual CLI runs, not just design intent. One gotcha it exists to document: the seeded `sessions` table needs its dead-tuple bloat (07.04/10.03) to survive until an audit actually runs, but Postgres's own autovacuum daemon was cleaning it up within its default ~1-minute naptime before a manual audit got around to it, making those two findings flaky. Fixed by starting the container with `-c autovacuum=off` cluster-wide — deliberately not a per-table `reloptions` override, since 07.04 specifically requires `reloptions IS NULL` to fire (it's checking for bloat on cluster-wide defaults, not a tuned-and-still-struggling table).
 
 Run the tests:
 

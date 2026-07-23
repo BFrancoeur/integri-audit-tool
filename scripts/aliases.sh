@@ -35,6 +35,9 @@ ia() {
     printf "  %-11s %s\n" "ia-backup"  "9. Backup, Recovery & Change Management"
     printf "  %-11s %s\n" "ia-mon"     "10. Monitoring & Observability"
     printf "  %-11s %s\n" "ia-docs"    "11. Documentation & Institutional Knowledge"
+    echo ""
+    printf "  %-11s %s\n" "ia-db-up"   "Set up/reuse the synthetic test database"
+    printf "  %-11s %s\n" "ia-db-down" "Tear down the synthetic test database"
 }
 
 _integri_audit_tool_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -50,5 +53,8 @@ alias ia-sec="$_integri_audit_tool_root/scripts/run-category.sh 8"      # Securi
 alias ia-backup="$_integri_audit_tool_root/scripts/run-category.sh 9"   # Backup, Recovery & Change Management
 alias ia-mon="$_integri_audit_tool_root/scripts/run-category.sh 10"     # Monitoring & Observability
 alias ia-docs="$_integri_audit_tool_root/scripts/run-category.sh 11"    # Documentation & Institutional Knowledge
+
+alias ia-db-up="$_integri_audit_tool_root/scripts/setup-synthetic-db.sh"
+alias ia-db-down="$_integri_audit_tool_root/scripts/teardown-synthetic-db.sh"
 
 unset _integri_audit_tool_root
