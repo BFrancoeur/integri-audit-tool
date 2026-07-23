@@ -120,6 +120,11 @@ def run(
         "--progress/--no-progress",
         help="Live progress UI. Default: auto-detect based on whether stderr is a terminal (also on under Git Bash/MSYS2).",
     ),
+    step: bool = typer.Option(
+        False,
+        "--step/--no-step",
+        help="Pause after each category's readiness message and wait for Enter before running it. Requires the progress UI.",
+    ),
     pdf: bool = typer.Option(True, "--pdf/--no-pdf", help="Also generate a PDF via Pandoc if available."),
 ) -> None:
     """Run the audit against DSN and write a Markdown (and, if possible, PDF) report."""
@@ -146,7 +151,7 @@ def run(
 
     reporters: list[AuditReporter] = [_IncrementalReportWriter(md_path, target_label)]
     if show_progress:
-        reporters.append(CliProgressReporter())
+        reporters.append(CliProgressReporter(interactive=step))
     reporter = CompositeReporter(reporters)
 
     with connect_read_only(dsn) as conn:

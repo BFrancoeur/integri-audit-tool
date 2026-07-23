@@ -61,13 +61,14 @@ class CliProgressReporter:
     just a count, and errors logged to logs/*.log.
     """
 
-    def __init__(self, logs_dir: Path | str = "logs") -> None:
+    def __init__(self, logs_dir: Path | str = "logs", interactive: bool = False) -> None:
         self._console = Console(stderr=True)
         self._progress: Progress | None = None
         self._tasks: dict[int, TaskID] = {}
         self._logs_dir = Path(logs_dir)
         self._logger: logging.Logger | None = None
         self._log_path: Path | None = None
+        self._interactive = interactive
 
     def _ensure_progress(self) -> Progress:
         if self._progress is None:
@@ -97,11 +98,22 @@ class CliProgressReporter:
 
     def category_ready(self, category: "CategoryModule", checks_to_run: list["Check"]) -> None:
         self._console.print(f"\n[bold]Ready to run Category {category.number}: {category.name}[/bold]")
+        if self._interactive:
+            self._wait_for_enter()
         progress = self._ensure_progress()
         task_id = progress.add_task(
             f"Category {category.number}", total=max(len(checks_to_run), 1)
         )
         self._tasks[category.number] = task_id
+
+    def _wait_for_enter(self) -> None:
+        self._console.print("[dim]Press Enter to run this category's tests...[/dim]")
+        try:
+            input()
+        except EOFError:
+            # No interactive stdin to wait on (piped/non-interactive
+            # invocation) — proceed rather than hang or crash.
+            pass
 
     def category_not_applicable(self, category: "CategoryModule", reason: str) -> None:
         self._console.print(f"[yellow]Category {category.number} not applicable:[/yellow] {reason}")
@@ -112,7 +124,17 @@ class CliProgressReporter:
     def check_succeeded(
         self, category: "CategoryModule", check: "Check", findings: list["Finding"]
     ) -> None:
-        self._console.print(f"[green]✓ {check.id} passed[/green] ({len(findings)} finding(s))")
+        # "Passed" means nothing to flag — a check that ran cleanly but found
+        # even a single low-severity issue isn't a pass, it's a completed
+        # check with something to address. The severity color-coding on each
+        # finding line below is what conveys how urgent it is; the
+        # checkmark/X only conveys whether anything was found at all.
+        if findings:
+            self._console.print(
+                f"[bold red]✗ {check.id} completed[/bold red] ({len(findings)} finding(s))"
+            )
+        else:
+            self._console.print(f"[green]✓ {check.id} passed[/green]")
         for finding in findings:
             style = _SEVERITY_STYLES.get(finding.severity, "")
             self._console.print(

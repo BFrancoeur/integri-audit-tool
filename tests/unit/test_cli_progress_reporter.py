@@ -131,7 +131,7 @@ def test_check_succeeded_prints_each_finding_severity_and_title(tmp_path, capsys
     assert "[Low]" in out
 
 
-def test_check_succeeded_prints_nothing_extra_when_no_findings(tmp_path, capsys):
+def test_check_succeeded_prints_green_passed_when_no_findings(tmp_path, capsys):
     reporter = CliProgressReporter(logs_dir=tmp_path / "logs")
     category = _category(checks=[_check()])
     check = _check()
@@ -141,7 +141,29 @@ def test_check_succeeded_prints_nothing_extra_when_no_findings(tmp_path, capsys)
     reporter.check_succeeded(category, check, [])
 
     out = capsys.readouterr().err
-    assert "✓ 01.01 passed (0 finding(s))" in out
+    assert "✓ 01.01 passed" in out
+    assert "✗" not in out
+    assert "completed" not in out
+
+
+def test_check_succeeded_prints_red_x_completed_when_findings_exist_even_low_severity(tmp_path, capsys):
+    """A check that runs cleanly but turns up even one low-severity finding is not
+    a "pass" — the severity color-coding on the finding line conveys urgency;
+    the checkmark/X only conveys whether anything needs addressing at all."""
+    reporter = CliProgressReporter(logs_dir=tmp_path / "logs")
+    category = _category(checks=[_check()])
+    check = _check()
+    findings = [_finding(title="Minor thing", severity=Severity.LOW)]
+
+    reporter.category_ready(category, [check])
+    reporter.check_started(category, check)
+    reporter.check_succeeded(category, check, findings)
+
+    out = capsys.readouterr().err
+    assert "✗ 01.01 completed" in out
+    assert "(1 finding(s))" in out
+    assert "✓" not in out
+    assert "passed" not in out
 
 
 def test_check_succeeded_escapes_markup_characters_in_finding_titles(tmp_path, capsys):
@@ -158,6 +180,45 @@ def test_check_succeeded_escapes_markup_characters_in_finding_titles(tmp_path, c
     reporter.check_succeeded(category, check, [finding])  # must not raise
 
     assert "Drift for ['a', 'b']" in capsys.readouterr().err
+
+
+def test_category_ready_does_not_block_by_default(tmp_path, capsys, monkeypatch):
+    def _fail_if_called():
+        raise AssertionError("input() should not be called when interactive=False")
+
+    monkeypatch.setattr("builtins.input", lambda: _fail_if_called())
+    reporter = CliProgressReporter(logs_dir=tmp_path / "logs")
+    category = _category(number=1, checks=[_check()])
+
+    reporter.category_ready(category, [_check()])  # must not raise / must not block
+
+    assert "Press Enter" not in capsys.readouterr().err
+
+
+def test_category_ready_waits_for_enter_when_interactive(tmp_path, capsys, monkeypatch):
+    calls = []
+    monkeypatch.setattr("builtins.input", lambda: calls.append(1))
+    reporter = CliProgressReporter(logs_dir=tmp_path / "logs", interactive=True)
+    category = _category(number=1, checks=[_check()])
+
+    reporter.category_ready(category, [_check()])
+
+    assert calls == [1]
+    assert "Press Enter to run this category's tests..." in capsys.readouterr().err
+
+
+def test_category_ready_interactive_survives_eof(tmp_path, capsys, monkeypatch):
+    """A non-interactive invocation (piped/closed stdin) with --step set shouldn't
+    hang or crash — it should just proceed."""
+
+    def _raise_eof():
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", lambda: _raise_eof())
+    reporter = CliProgressReporter(logs_dir=tmp_path / "logs", interactive=True)
+    category = _category(number=1, checks=[_check()])
+
+    reporter.category_ready(category, [_check()])  # must not raise
 
 
 def test_audit_completed_no_longer_prints_its_own_banner(tmp_path, capsys):
