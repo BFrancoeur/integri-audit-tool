@@ -1,0 +1,3 @@
+# Shell scripts must keep LF line endings regardless of core.autocrlf —
+# CRLF in a shebang line (or embedded \r throughout) breaks execution.
+*.sh text eol=lf

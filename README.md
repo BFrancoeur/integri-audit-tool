@@ -30,16 +30,33 @@ Findings are produced in the audit phase only — read-only, no writes. Remediat
 
 ## Usage
 
-Requires [`uv`](https://docs.astral.sh/uv/) and Python 3.11+ (uv provisions the interpreter automatically).
+Requires [`uv`](https://docs.astral.sh/uv/) and Python 3.11+ (uv provisions the interpreter automatically). Optionally, [Pandoc](https://pandoc.org/) plus a PDF engine (a LaTeX distribution like MiKTeX/TeX Live, or `wkhtmltopdf`) for PDF report generation — the tool works fine without either, it just skips the PDF step with a clear notice.
 
 ```bash
 uv sync --group dev            # install runtime + dev dependencies
-uv run integri-audit --dsn "postgresql://user:pass@host:5432/dbname"
-uv run integri-audit --dsn "$INTEGRI_DSN" --output report.md      # write to a file instead of stdout
-uv run integri-audit --dsn "$INTEGRI_DSN" -c 3 -c 6                # limit to specific rubric category numbers
+
+uv run integri-audit list-checks              # list every check id + description, no DB connection needed
+uv run integri-audit list-checks -c 3          # ...limited to one category
+
+uv run integri-audit run --dsn "postgresql://user:pass@host:5432/dbname"
+uv run integri-audit run --dsn "$INTEGRI_DSN" -c 3 -c 6      # limit to specific rubric category numbers
+uv run integri-audit run --dsn "$INTEGRI_DSN" -k 01.04 -k 03.02   # limit to specific check ids
+uv run integri-audit run --dsn "$INTEGRI_DSN" --output report.md --no-pdf   # explicit path, Markdown only
 ```
 
 The DSN can also be supplied via the `INTEGRI_DSN` environment variable instead of `--dsn`. The tool connects read-only and never writes to the audited database.
+
+By default `run` writes `reports/audit-<timestamp>.md` (and a matching `.pdf` if Pandoc + a PDF engine are available) instead of printing to stdout — `--output <path>` overrides where the Markdown goes. A live progress UI (readiness message per category, a progress bar per check, green ✓ / red ✗, errors additionally logged to `logs/audit-<timestamp>.log`) is on by default when stderr is a terminal, off otherwise (redirected output, cron, CI) — override either way with `--progress`/`--no-progress`. All of this status output goes to **stderr**; the report itself only ever goes to the file (or, historically, stdout) — `... > /dev/null` never clips the report.
+
+For running individual checks by hand repeatedly (e.g. validating against a real client database before scripting a full unattended run), thin Bash wrappers live in `scripts/`:
+
+```bash
+export INTEGRI_DSN="postgresql://user:pass@host:5432/dbname"
+scripts/list-checks.sh -c 1        # what's available in category 1
+scripts/run-check.sh 01.04         # run just that one check
+scripts/run-category.sh 1          # run every check in category 1
+```
+Each forwards any extra arguments to `integri-audit run`, so `--dsn`/`--output`/etc. still work to override `$INTEGRI_DSN`. There's deliberately no "run everything unattended" script yet — that's later work, once individual checks have been manually exercised enough to trust automating them.
 
 Run the tests:
 
@@ -53,6 +70,8 @@ uv run pytest -m integration   # + integration tests against a real Postgres (re
 - **Core** (`src/integri_audit_tool/`) — CLI entrypoint (`cli.py`), read-only DB connection handling (`db.py`), the `Finding`/`Severity`/`AuditReport` data model (`models.py`), dynamic category discovery (`registry.py`), audit orchestration (`runner.py`), and the Markdown report renderer (`report/markdown.py`).
 - **Categories** (`src/integri_audit_tool/categories/`) — one package per rubric category, folder-named to mirror the rubric heading (e.g. `03_indexing_strategy` ↔ rubric section "3. Indexing Strategy"). Each exports a `CATEGORY` object the registry discovers automatically — no central list to maintain. Default granularity is one function per rubric checklist bullet; a category only gets extra files (e.g. splitting `queries.py` raw SQL from `checks.py` interpretation logic) when it's complex enough to need it.
 - Category folders start with a zero-padded number and are therefore not valid Python identifiers as literal `import` targets — this is intentional and safe, since they're only ever loaded dynamically via `importlib` (see `registry.py`), the same pattern Django uses for migration files (`0001_initial.py`).
+- **Live progress UI + per-check CLI selection + PDF export** are a deliberate case study in keeping a feature "not core": `reporter.py` defines an `AuditReporter` Protocol (category/check start/success/failure/complete hooks) and a `NullReporter` no-op default — `runner.py` calls these hooks but never imports anything presentation-related, so every existing test that calls `run_audit()` without a `reporter` argument is untouched. The actual colors/progress-bars/error-logging implementation (`cli_progress_reporter.py`, using `rich`) and PDF conversion (`pdf_export.py`, shelling out to `pandoc` — a system binary, not a Python dependency, since it has no PDF renderer of its own without a separately-installed engine) live entirely outside core; swapping in a different `AuditReporter` (a JSON-lines one for CI, say) never touches `runner.py`. `AuditConfig.check_filter` extends the existing `category_filter` pattern one level down, to individual check ids (`-k 01.04`), backing `scripts/run-check.sh`/`run-category.sh` — thin Bash wrappers, since that's the shell the tool is meant to be driven from day to day.
+  - Two real bugs found via live testing, not unit tests (which don't render anything real): (1) Windows consoles often don't default stdout/stderr to UTF-8, so the ✓/✗/em-dashes this feature prints came back as literal escaped text or mangled replacement characters — fixed by reconfiguring both streams to UTF-8 at the top of `cli.py`, before any `rich.Console` is constructed against them. (2) Running a single check via `--check` still announced (and drew an empty 0/N progress bar for) every *other* category, since `category_ready` fired unconditionally — fixed by computing which checks actually match the filter *before* deciding whether to announce a category at all, and skipping categories that contribute nothing under the filter without even evaluating their `applicability()` (avoids a wasted DB round-trip for a category that was never going to run anything).
 - **All 11 automatable rubric categories are now implemented**, each covered by unit tests, live-Postgres integration tests, and a manual CLI run: **Schema Design & Normalization Boundaries** (category 1, 3 of 6 bullets), **JSONB Structure & Governance** (category 2, 3 of 6), **Indexing Strategy** (category 3, 3 of 7), **Full-Text & Structured Search Behavior** (category 4, 5 of 6), **Query Patterns & Application Interaction** (category 5, 4 of 6), **Data Quality & Integrity** (category 6, 5 of 6), **Scale & Growth Readiness** (category 7, 5 of 5 — the only category with zero deferred/out-of-scope bullets), **Security & Access Boundaries** (category 8, 5 of 6), **Backup, Recovery & Change Management** (category 9, 4 of 4), **Monitoring & Observability** (category 10, 3 of 4), and **Documentation & Institutional Knowledge** (category 11, 3 of 4). Category 12 (Compliance & Data Privacy) was out of scope by design from the start (see README intro). Next work on this tool is either filling in each category's remaining deferred bullets, or moving on to something beyond the rubric's 12 categories.
 - Category 11 closes a loop left open in category 2: 02.01 (a governing schema/registry for JSONB keys) was deferred there as follow-up work; category 11's 11.03 is that follow-up, asked from the institutional-knowledge angle instead — same underlying signal (a heuristically-named registry table), different rubric bullet. 11.02 is deliberately broader than category 8's 08.04 (which only checks PII-*named* columns for missing comments): 11.02 checks *every* JSONB column, since the rubric bullet here is about documenting an architectural choice (why JSONB), not flagging sensitive data.
 - Category 10's 10.02 check ("alerts on connection saturation, replication lag, disk usage, and long-running queries") is narrowed to two of those four: current connection count vs `max_connections`, and currently-active queries past a duration threshold — both real, current-state signals, escalating to High at higher severity thresholds. Disk usage isn't visible to Postgres at all (OS-level), and replication lag only matters if replicas are connected, which category 9's 09.04 already reports on. 10.03 (bloat monitored with a maintenance plan) is deliberately distinct from category 7's 07.04: 07.04 flags bloat + no per-table autovacuum *configuration*, while 10.03 flags bloat + no vacuum *activity* recorded recently — a table can be perfectly configured and still show 10.03 if autovacuum is failing or starved cluster-wide, so the two catch different failure modes on the same underlying `pg_stat_user_tables` data.

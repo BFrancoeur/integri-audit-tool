@@ -9,9 +9,16 @@ import psycopg
 from integri_audit_tool import registry
 from integri_audit_tool.config import AuditConfig
 from integri_audit_tool.models import CATEGORY_12_OUT_OF_SCOPE_NOTE, AuditReport, CategoryResult, Finding, Severity
+from integri_audit_tool.reporter import AuditReporter, NullReporter
 
 
-def run_audit(conn: psycopg.Connection, config: AuditConfig, target_label: str) -> AuditReport:
+def run_audit(
+    conn: psycopg.Connection,
+    config: AuditConfig,
+    target_label: str,
+    reporter: AuditReporter | None = None,
+) -> AuditReport:
+    reporter = reporter or NullReporter()
     all_categories = registry.discover_categories()
 
     # Out-of-scope notes (permanent tool limitations, like category 12's
@@ -28,22 +35,47 @@ def run_audit(conn: psycopg.Connection, config: AuditConfig, target_label: str) 
         if config.category_filter is not None and category.number not in config.category_filter:
             continue
 
+        checks_to_run = [
+            check
+            for check in category.checks
+            if config.check_filter is None or check.id in config.check_filter
+        ]
+
+        # When a --check filter is active and this category contributes
+        # nothing to it, skip it entirely — no reporter noise (an empty 0/N
+        # progress bar for every unrelated category), and no wasted
+        # applicability query against the database for a category that was
+        # never going to run anything anyway.
+        if config.check_filter is not None and not checks_to_run:
+            results.append(
+                CategoryResult(category_number=category.number, category_name=category.name, status="completed")
+            )
+            continue
+
+        reporter.category_ready(category, checks_to_run)
+
         if category.applicability is not None and not category.applicability(conn):
+            reason = "Category does not apply to this database (applicability check returned False)."
+            reporter.category_not_applicable(category, reason)
             results.append(
                 CategoryResult(
                     category_number=category.number,
                     category_name=category.name,
                     status="not_applicable",
-                    na_reason="Category does not apply to this database (applicability check returned False).",
+                    na_reason=reason,
                 )
             )
             continue
 
         findings: list[Finding] = []
-        for check in category.checks:
+        for check in checks_to_run:
+            reporter.check_started(category, check)
             try:
-                findings.extend(check.fn(conn, config))
+                check_findings = check.fn(conn, config)
+                findings.extend(check_findings)
+                reporter.check_succeeded(category, check, check_findings)
             except Exception as exc:  # noqa: BLE001 - one bad check must not abort the run
+                reporter.check_failed(category, check, exc)
                 findings.append(
                     Finding(
                         category_number=category.number,
@@ -64,9 +96,11 @@ def run_audit(conn: psycopg.Connection, config: AuditConfig, target_label: str) 
             )
         )
 
-    return AuditReport(
+    report = AuditReport(
         target_label=target_label,
         generated_at=datetime.now(timezone.utc),
         category_results=results,
         out_of_scope=out_of_scope_notes,
     )
+    reporter.audit_completed(report)
+    return report
