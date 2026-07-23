@@ -53,6 +53,8 @@ The DSN can also be supplied via the `INTEGRI_DSN` environment variable instead 
 
 By default `run` writes `reports/audit-<timestamp>.md` (and a matching `.pdf` if Pandoc + a PDF engine are available) instead of printing to stdout — `--output <path>` overrides where the Markdown goes. A live progress UI (readiness message per category, a progress bar per check, green ✓ / red ✗, errors additionally logged to `logs/audit-<timestamp>.log`) is on by default when stderr is a terminal, off otherwise (redirected output, cron, CI) — override either way with `--progress`/`--no-progress`. All of this status output goes to **stderr**; the report itself only ever goes to the file (or, historically, stdout) — `... > /dev/null` never clips the report.
 
+Auto-detection also treats Git Bash/MSYS2 as a terminal even when it isn't (checking the `MSYSTEM` env var as a fallback) — `mintty`, Git Bash's terminal emulator, reports `isatty() == False` to Python even in a genuinely interactive session, which would otherwise silently disable the progress UI for exactly the shell this tool is meant to be run from day to day.
+
 For running individual checks by hand repeatedly (e.g. validating against a real client database before scripting a full unattended run), thin Bash wrappers live in `scripts/`:
 
 ```bash

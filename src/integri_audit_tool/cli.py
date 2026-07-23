@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -34,6 +35,15 @@ for _stream in (sys.stdout, sys.stderr):
 app = typer.Typer(help="Read-only Postgres database & search audit tool.")
 
 
+def _is_interactive_terminal(console: Console) -> bool:
+    """rich's Console.is_terminal is Python's isatty() under the hood, which
+    mintty (Git Bash's terminal) reports as False even in an interactive
+    session — a known mintty/MSYS limitation, not a real "output is
+    redirected" case. MSYSTEM is set by Git Bash/MSYS2 specifically (never by
+    a real redirect, cron, or CI), so it's a safe fallback signal."""
+    return console.is_terminal or "MSYSTEM" in os.environ
+
+
 def _sanitize_dsn_for_label(dsn: str) -> str:
     """Strip credentials from a DSN so it's safe to print in a report."""
     parts = urlsplit(dsn)
@@ -58,7 +68,7 @@ def run(
     progress: Optional[bool] = typer.Option(
         None,
         "--progress/--no-progress",
-        help="Live progress UI. Default: auto-detect based on whether stderr is a terminal.",
+        help="Live progress UI. Default: auto-detect based on whether stderr is a terminal (also on under Git Bash/MSYS2).",
     ),
     pdf: bool = typer.Option(True, "--pdf/--no-pdf", help="Also generate a PDF via Pandoc if available."),
 ) -> None:
@@ -70,7 +80,7 @@ def run(
     )
 
     console = Console(stderr=True)
-    show_progress = progress if progress is not None else console.is_terminal
+    show_progress = progress if progress is not None else _is_interactive_terminal(console)
     reporter = CliProgressReporter() if show_progress else None
 
     with connect_read_only(dsn) as conn:

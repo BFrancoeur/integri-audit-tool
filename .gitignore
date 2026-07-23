@@ -7,5 +7,7 @@ __pycache__/
 dist/
 build/
 /report*.md
+/reports/
+/logs/
 .coverage
 htmlcov/
