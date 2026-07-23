@@ -1,0 +1,30 @@
+% LaTeX header-includes for PDF generation (see pdf_export.py). Requires
+% xelatex (not pdflatex) since it uses fontspec to pull in real installed
+% system fonts by name rather than LaTeX's built-in Computer Modern.
+%
+% Body text: Open Sans. Headings (all of #/##/###/#### in the generated
+% Markdown, i.e. \section/\subsection/\subsubsection/\paragraph once Pandoc
+% converts them): Lora Bold. Table column headings: Open Sans SemiBold.
+\usepackage{fontspec}
+\setmainfont{Open Sans}
+\newfontfamily\headingfont{Lora}
+\newfontfamily\tableheadfont{Open Sans SemiBold}
+
+\usepackage{titlesec}
+\titleformat{\section}{\headingfont\bfseries\Large}{}{0pt}{}
+\titleformat{\subsection}{\headingfont\bfseries\large}{}{0pt}{}
+\titleformat{\subsubsection}{\headingfont\bfseries\normalsize}{}{0pt}{}
+% \paragraph defaults to a run-in heading (same line as the text that
+% follows) — [block] makes it sit on its own line like the other levels,
+% since #### marks a distinct finding heading in the report, not a run-in
+% label.
+\titleformat{\paragraph}[block]{\headingfont\bfseries\normalsize}{}{0pt}{}
+\titlespacing*{\paragraph}{0pt}{2ex}{1ex}
+
+% Table column headings (Open Sans SemiBold, via \tableheadfont above) are
+% applied per-cell by pandoc_table_header_font.lua, not here — redefining
+% \toprule/\midrule to inject a font switch broke booktabs/longtable's
+% internal \noalign handling ("Misplaced \noalign", confirmed empirically).
+% The Lua filter operates on the Pandoc AST before LaTeX serialization, so
+% it only ever touches header-cell text, never the surrounding table
+% structure commands.

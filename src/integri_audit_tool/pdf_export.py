@@ -24,6 +24,10 @@ class PdfConversionError(RuntimeError):
     """Raised when Pandoc is missing or the conversion subprocess fails."""
 
 
+_STYLE_TEX = Path(__file__).parent / "report" / "pdf_style.tex"
+_TABLE_HEADER_FONT_LUA = Path(__file__).parent / "report" / "pandoc_table_header_font.lua"
+
+
 def is_pandoc_available() -> bool:
     return shutil.which("pandoc") is not None
 
@@ -55,9 +59,18 @@ def convert_markdown_to_pdf(
         progress.start()
         progress.add_task("Creating PDF audit report...", total=None)
 
+    # xelatex (not pdflatex, the default) is required for pdf_style.tex's
+    # fontspec-based system fonts (Open Sans body / Lora Bold headings) —
+    # pdflatex can only use LaTeX's built-in Computer Modern.
+    command = ["pandoc", str(markdown_path), "-o", str(pdf_path), "--pdf-engine=xelatex"]
+    if _STYLE_TEX.exists():
+        command.append(f"--include-in-header={_STYLE_TEX}")
+    if _TABLE_HEADER_FONT_LUA.exists():
+        command.append(f"--lua-filter={_TABLE_HEADER_FONT_LUA}")
+
     try:
         subprocess.run(
-            ["pandoc", str(markdown_path), "-o", str(pdf_path)],
+            command,
             check=True,
             capture_output=True,
             text=True,
@@ -65,9 +78,10 @@ def convert_markdown_to_pdf(
     except subprocess.CalledProcessError as exc:
         raise PdfConversionError(
             "pandoc failed to produce a PDF — this usually means no PDF engine "
-            "(a LaTeX distribution like MiKTeX/TeX Live, or wkhtmltopdf via "
-            "`--pdf-engine=wkhtmltopdf`) is installed. Pandoc's error:\n"
-            f"{exc.stderr.strip() if exc.stderr else '(no stderr captured)'}"
+            "(a LaTeX distribution like MiKTeX/TeX Live with xelatex, or wkhtmltopdf via "
+            "`--pdf-engine=wkhtmltopdf`) is installed, or the fonts referenced in "
+            "report/pdf_style.tex (Open Sans, Lora) aren't installed on this machine. "
+            f"Pandoc's error:\n{exc.stderr.strip() if exc.stderr else '(no stderr captured)'}"
         ) from exc
     finally:
         if progress is not None:

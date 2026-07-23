@@ -49,3 +49,23 @@ def test_convert_markdown_to_pdf_succeeds_when_subprocess_succeeds(mocker):
     )
 
     mock_run.assert_called_once()
+
+
+def test_convert_markdown_to_pdf_uses_xelatex_and_styling_files(mocker):
+    """pdflatex can't use pdf_style.tex's fontspec-based system fonts (Open Sans /
+    Lora) — the engine must be xelatex, with the style/lua-filter files attached,
+    since both ship alongside pdf_export.py and are expected to exist."""
+    mocker.patch.object(pdf_export, "is_pandoc_available", return_value=True)
+    mock_run = mocker.patch.object(pdf_export.subprocess, "run")
+
+    pdf_export.convert_markdown_to_pdf(
+        Path("report.md"), Path("report.pdf"), Console(stderr=True), show_progress=False
+    )
+
+    command = mock_run.call_args[0][0]
+    assert command[:4] == ["pandoc", "report.md", "-o", "report.pdf"]
+    assert "--pdf-engine=xelatex" in command
+    assert any(arg.startswith("--include-in-header=") and arg.endswith("pdf_style.tex") for arg in command)
+    assert any(
+        arg.startswith("--lua-filter=") and arg.endswith("pandoc_table_header_font.lua") for arg in command
+    )
