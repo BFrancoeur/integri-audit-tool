@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+import pytest
+import typer
 from rich.console import Console
 
-from integri_audit_tool.cli import _IncrementalReportWriter, _is_interactive_terminal
+from integri_audit_tool.cli import (
+    _IncrementalReportWriter,
+    _is_interactive_terminal,
+    _prompt_for_client_report_path,
+    _slugify,
+)
 from integri_audit_tool.models import CategoryResult, Finding, Severity
 from integri_audit_tool.registry import CategoryModule
 
@@ -68,3 +75,43 @@ def test_incremental_report_writer_accumulates_across_categories_in_the_same_fil
     content = md_path.read_text(encoding="utf-8")
     assert "Finding from category 1" in content
     assert "B" in content
+
+
+def test_slugify_lowercases_and_hyphenates():
+    assert _slugify("Acme Test Co") == "acme-test-co"
+
+
+def test_slugify_collapses_non_alphanumeric_runs_and_trims_edges():
+    assert _slugify("  Zota Manufacturing, Inc.!! ") == "zota-manufacturing-inc"
+
+
+def test_slugify_empty_for_a_name_with_no_letters_or_digits():
+    assert _slugify("!!!") == ""
+
+
+def test_prompt_for_client_report_path_builds_expected_filename(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "Acme Test Co")
+
+    path = _prompt_for_client_report_path()
+
+    assert path.parent.resolve() == (tmp_path / "reports").resolve()
+    assert path.name.startswith("acme-test-co-")
+    assert path.name.endswith(".md")
+    assert path.parent.is_dir()
+
+
+def test_prompt_for_client_report_path_rejects_empty_name(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "   ")
+
+    with pytest.raises(typer.Exit):
+        _prompt_for_client_report_path()
+
+
+def test_prompt_for_client_report_path_rejects_name_with_no_letters_or_digits(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "!!!")
+
+    with pytest.raises(typer.Exit):
+        _prompt_for_client_report_path()

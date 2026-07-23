@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -103,11 +104,52 @@ def _sanitize_dsn_for_label(dsn: str) -> str:
     return urlunsplit((parts.scheme, netloc, parts.path, "", ""))
 
 
+def _slugify(name: str) -> str:
+    """Lowercase, collapse anything that isn't a-z/0-9 into a single hyphen,
+    trim leading/trailing hyphens — safe on any filesystem, still readable."""
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+def _prompt_for_client_report_path() -> Path:
+    """Prompts for the client's business name and returns
+    reports/<slug>-<timestamp-id>.md — done here, in the same process (and
+    via the same input() used by --step's Enter-gates) that will go on to
+    read every subsequent keypress, rather than in a wrapping shell script.
+    Handing stdin off between a bash `read` and a freshly-spawned Python
+    subprocess is exactly the kind of thing that can leak a buffered
+    keystroke through under Git Bash/mintty — confirmed live: the Enter that
+    submitted the business name was silently satisfying category 1's --step
+    gate too, so category 1 ran without ever waiting for a real keypress.
+    Keeping the whole interactive sequence in one process's input() calls
+    avoids that boundary entirely.
+    """
+    business_name = input("Client's business name: ").strip()
+    if not business_name:
+        typer.echo("Client's business name cannot be empty.", err=True)
+        raise typer.Exit(code=1)
+    slug = _slugify(business_name)
+    if not slug:
+        typer.echo("Client's business name must contain at least one letter or digit.", err=True)
+        raise typer.Exit(code=1)
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    reports_dir = Path("reports")
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    return reports_dir / f"{slug}-{timestamp}.md"
+
+
 @app.command()
 def run(
     dsn: str = typer.Option(..., "--dsn", envvar="INTEGRI_DSN", help="Postgres connection string."),
     output: Optional[Path] = typer.Option(
         None, "--output", "-o", help="Write the Markdown report here instead of reports/audit-<timestamp>.md."
+    ),
+    ask_client_name: bool = typer.Option(
+        False,
+        "--ask-client-name/--no-ask-client-name",
+        help=(
+            "Prompt for the client's business name and write the report to "
+            "reports/<slug>-<id>.md instead of the default. Ignored if --output is given."
+        ),
     ),
     category: list[int] = typer.Option(
         None, "--category", "-c", help="Limit to specific rubric category numbers (repeatable)."
@@ -138,6 +180,8 @@ def run(
     # below has somewhere to write as each category finishes.
     if output is not None:
         md_path = output
+    elif ask_client_name:
+        md_path = _prompt_for_client_report_path()
     else:
         reports_dir = Path("reports")
         reports_dir.mkdir(parents=True, exist_ok=True)

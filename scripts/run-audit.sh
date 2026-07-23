@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
-# Prompts for the client's business name and runs a full audit, writing the
-# report to reports/<business-name-slug>-<unique-id>.md — so the filename
-# itself identifies which client it's for, preventing an audit meant for one
-# client from accidentally being sent to another.
+# Runs a full audit, prompting for the client's business name and writing
+# the report to reports/<business-name-slug>-<unique-id>.md — so the
+# filename itself identifies which client it's for, preventing an audit
+# meant for one client from accidentally being sent to another.
+#
+# The business-name prompt and the --step "press Enter" gates below both
+# live in integri-audit's own Python process (cli.py's --ask-client-name),
+# not here — handing stdin off between a bash `read` and a freshly-spawned
+# Python subprocess turned out to leak a buffered keystroke through under
+# Git Bash/mintty (the Enter that submitted the business name was also
+# silently satisfying category 1's --step gate). Keeping the whole
+# interactive sequence inside one process's input() calls avoids that.
 #
 # Runs with --step by default: each category pauses at its readiness message
 # until you press Enter, so 11 categories don't just blast through
@@ -18,27 +26,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-read -r -p "Client's business name: " business_name
-if [ -z "$business_name" ]; then
-    echo "Client's business name cannot be empty." >&2
-    exit 1
-fi
-
-# Lowercase, collapse anything that isn't a-z/0-9 into a single hyphen, trim
-# leading/trailing hyphens — safe on any filesystem, still human-readable.
-slug=$(echo "$business_name" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')
-if [ -z "$slug" ]; then
-    echo "Client's business name must contain at least one letter or digit." >&2
-    exit 1
-fi
-
-# A timestamp is a simple, always-unique numeric id with no persistent
-# counter file to manage — re-running for the same client just produces a
-# new file instead of colliding with or overwriting a prior audit's report.
-unique_id=$(date +%Y%m%d%H%M%S)
-output_path="$SCRIPT_DIR/reports/${slug}-${unique_id}.md"
-
 cd "$SCRIPT_DIR"
-# --step comes before "$@" so an explicit --no-step passed through still wins
-# (Typer/Click resolve boolean toggle flags by last occurrence).
-uv run integri-audit run --output "$output_path" --step "$@"
+# --step/--ask-client-name come before "$@" so an explicit --no-step or
+# --no-ask-client-name passed through still wins (Typer/Click resolve
+# boolean toggle flags by last occurrence).
+uv run integri-audit run --step --ask-client-name "$@"

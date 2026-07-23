@@ -109,6 +109,8 @@ Integri Audit Tool — per-category aliases (each forwards extra args to 'integr
 
 `ia run` (or `./scripts/run-audit.sh` directly) is the entry point for an actual client-facing audit, not just manual check exploration. It prompts for the client's business name and names the report after it plus a unique timestamp-based id — `reports/<slugified-business-name>-<id>.md` — specifically so a report can never be ambiguous about which client it's for, and re-running for the same client never overwrites a prior report. It also runs with `--step` by default (pass `--no-step` to run all 11 categories uninterrupted instead), pausing before each category so you can review what a category found before the next one starts:
 
+The business-name prompt (`--ask-client-name` under the hood) and the `--step` "press Enter" gates both live inside `integri-audit`'s own Python process (`cli.py`'s `input()` calls), not in the wrapping Bash script — handing stdin off between a bash `read` and a freshly-spawned Python subprocess turned out to leak a buffered keystroke through under Git Bash/mintty: the Enter that submitted the business name was also silently satisfying category 1's `--step` gate, so the first category ran without ever actually waiting for a keypress. Keeping the whole interactive sequence inside one process's `input()` calls eliminates that.
+
 ```bash
 export INTEGRI_DSN="postgresql://user:pass@host:5432/dbname"
 ia run
