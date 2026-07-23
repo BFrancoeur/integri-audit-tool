@@ -70,6 +70,26 @@ source scripts/aliases.sh                                       # for the curren
 echo 'source /path/to/integri-audit-tool/scripts/aliases.sh' >> ~/.bashrc   # to make them permanent
 ```
 
+Run `ia --help` any time to list them all without leaving the CLI:
+
+```
+Integri Audit Tool — per-category aliases (each forwards extra args to 'integri-audit run')
+
+  Alias       Category
+  -----       --------
+  ia-schema   1. Schema Design & Normalization Boundaries
+  ia-jsonb    2. JSONB Structure & Governance
+  ia-index    3. Indexing Strategy
+  ia-fts      4. Full-Text & Structured Search Behavior
+  ia-query    5. Query Patterns & Application Interaction
+  ia-quality  6. Data Quality & Integrity
+  ia-scale    7. Scale & Growth Readiness
+  ia-sec      8. Security & Access Boundaries
+  ia-backup   9. Backup, Recovery & Change Management
+  ia-mon      10. Monitoring & Observability
+  ia-docs     11. Documentation & Institutional Knowledge
+```
+
 Run the tests:
 
 ```bash

@@ -11,6 +11,31 @@
 #
 # Each alias forwards extra args to `integri-audit run`, same as
 # run-category.sh, e.g.: ia-schema --output report.md --no-pdf
+#
+# Run `ia --help` any time to list them all without leaving the CLI.
+
+ia() {
+    if [ "$#" -gt 0 ] && [ "$1" != "--help" ] && [ "$1" != "-h" ]; then
+        echo "Unknown option: $1. Try 'ia --help'." >&2
+        return 1
+    fi
+
+    echo "Integri Audit Tool — per-category aliases (each forwards extra args to 'integri-audit run')"
+    echo ""
+    printf "  %-11s %s\n" "Alias" "Category"
+    printf "  %-11s %s\n" "-----" "--------"
+    printf "  %-11s %s\n" "ia-schema"  "1. Schema Design & Normalization Boundaries"
+    printf "  %-11s %s\n" "ia-jsonb"   "2. JSONB Structure & Governance"
+    printf "  %-11s %s\n" "ia-index"   "3. Indexing Strategy"
+    printf "  %-11s %s\n" "ia-fts"     "4. Full-Text & Structured Search Behavior"
+    printf "  %-11s %s\n" "ia-query"   "5. Query Patterns & Application Interaction"
+    printf "  %-11s %s\n" "ia-quality" "6. Data Quality & Integrity"
+    printf "  %-11s %s\n" "ia-scale"   "7. Scale & Growth Readiness"
+    printf "  %-11s %s\n" "ia-sec"     "8. Security & Access Boundaries"
+    printf "  %-11s %s\n" "ia-backup"  "9. Backup, Recovery & Change Management"
+    printf "  %-11s %s\n" "ia-mon"     "10. Monitoring & Observability"
+    printf "  %-11s %s\n" "ia-docs"    "11. Documentation & Institutional Knowledge"
+}
 
 _integri_audit_tool_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
