@@ -32,6 +32,11 @@ Findings are produced in the audit phase only — read-only, no writes. Remediat
 
 Requires [`uv`](https://docs.astral.sh/uv/) and Python 3.11+ (uv provisions the interpreter automatically). Optionally, [Pandoc](https://pandoc.org/) plus a PDF engine (a LaTeX distribution like MiKTeX/TeX Live, or `wkhtmltopdf`) for PDF report generation — the tool works fine without either, it just skips the PDF step with a clear notice.
 
+**Getting Pandoc + MiKTeX actually working on Windows** (both installed via `winget install --id=JohnMacFarlane.Pandoc` / `winget install --id=MiKTeX.MiKTeX`) took two extra fixes beyond installing them, worth knowing if PDF generation mysteriously fails even with both "installed":
+- **MiKTeX's winget package doesn't add its `bin\x64` directory to PATH.** Add it yourself (`[Environment]::SetEnvironmentVariable("Path", $oldPath + ";C:\...\MiKTeX\miktex\bin\x64", "User")`), or `pdflatex` simply won't be found.
+- **MiKTeX Basic ships without most LaTeX packages** — they're meant to be fetched on first use, but that requires an interactive prompt, which never happens when pdflatex runs non-interactively (as Pandoc always invokes it), so the very first PDF fails on something like `! LaTeX Error: File 'footnote.sty' not found.` and hangs waiting for input. Fix once: `initexmf --set-config-value=[MPM]AutoInstall=1`.
+- **A real, pre-existing, unrelated PATH bug on this machine** caused a much stranger failure first: `C:\Program Files\Git\bin\bash.exe` (a *file*) was listed as a literal PATH *entry*, rather than `C:\Program Files\Git\bin` (the directory). Windows PATH entries must be directories, so this entry was already inert for normal command resolution — but MiKTeX's one-time format-file build walks PATH expecting only directories and crashed hard on it (`GetFileAttributesW` error 267, "the directory name is invalid"), taking every PDF conversion down with it. Removing the malformed entry fixed it; if you ever see MiKTeX failing over a `...bash.exe\` path, check for exactly this.
+
 ```bash
 uv sync --group dev            # install runtime + dev dependencies
 
