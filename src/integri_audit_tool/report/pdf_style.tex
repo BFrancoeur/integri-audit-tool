@@ -10,6 +10,17 @@
 \newfontfamily\headingfont{Lora}
 \newfontfamily\tableheadfont{Open Sans SemiBold}
 
+% Markdown-style paragraphs: spacing between paragraphs instead of a
+% first-line indent (parskip), and ragged-right instead of fully-justified
+% text (ragged2e's \RaggedRight — better hyphenation handling than the
+% base LaTeX \raggedright) — closer to how a markdown viewer (GitHub, VS
+% Code preview, etc.) renders the same document. Also makes body text
+% consistent with the table cells below, which were already
+% \raggedright per-column even before this.
+\usepackage{parskip}
+\usepackage{ragged2e}
+\RaggedRight
+
 \usepackage{titlesec}
 \titleformat{\section}{\headingfont\bfseries\Large}{}{0pt}{}
 \titleformat{\subsection}{\headingfont\bfseries\large}{}{0pt}{}
