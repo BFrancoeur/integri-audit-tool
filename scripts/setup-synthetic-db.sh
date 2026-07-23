@@ -23,7 +23,13 @@ CONTAINER_NAME="integri-synthetic-db"
 POSTGRES_PORT=55432
 POSTGRES_DB="synthetic_client"
 POSTGRES_PASSWORD="synthetic"
-DSN="postgresql://postgres:${POSTGRES_PASSWORD}@localhost:${POSTGRES_PORT}/${POSTGRES_DB}"
+# 127.0.0.1, not localhost: Docker's port binding below is IPv4-only
+# (127.0.0.1:55432), but "localhost" often resolves to IPv6 (::1) first on
+# Windows — psycopg then hangs on a dead IPv6 connection attempt until it
+# times out and falls back to IPv4, turning every check into a ~2 minute
+# wait for no reason. Confirmed: same query, 127.0.0.1 = 0.8s, localhost =
+# 2m10s.
+DSN="postgresql://postgres:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/${POSTGRES_DB}"
 
 if [ "${1:-}" = "--recreate" ]; then
     echo "Removing existing '$CONTAINER_NAME' container (if any)..." >&2

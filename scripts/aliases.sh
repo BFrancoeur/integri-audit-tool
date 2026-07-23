@@ -90,7 +90,7 @@ ia-db-down() {
     "$_root/scripts/teardown-synthetic-db.sh" "$@" || return $?
     # Only clear it if it still points at the synthetic db this just tore
     # down — never clobber a DSN you set yourself for something else.
-    if [ "${INTEGRI_DSN:-}" = "postgresql://postgres:synthetic@localhost:55432/synthetic_client" ]; then
+    if [ "${INTEGRI_DSN:-}" = "postgresql://postgres:synthetic@127.0.0.1:55432/synthetic_client" ]; then
         unset INTEGRI_DSN
         echo "INTEGRI_DSN unset."
     fi
