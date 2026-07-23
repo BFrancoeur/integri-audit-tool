@@ -5,15 +5,17 @@ from __future__ import annotations
 import os
 import re
 import sys
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 from urllib.parse import urlsplit, urlunsplit
 
+import psycopg
 import typer
 from rich.console import Console
 
-from integri_audit_tool import pdf_export
+from integri_audit_tool import db_login, pdf_export, ssh_tunnel
 from integri_audit_tool.cli_progress_reporter import CliProgressReporter
 from integri_audit_tool.config import AuditConfig
 from integri_audit_tool.db import connect_read_only
@@ -61,9 +63,10 @@ class _IncrementalReportWriter:
     couple of no-ops the type checker doesn't require but keep intent clear.
     """
 
-    def __init__(self, md_path: Path, target_label: str) -> None:
+    def __init__(self, md_path: Path, target_label: str, client_name: str | None = None) -> None:
         self._md_path = md_path
         self._target_label = target_label
+        self._client_name = client_name
         self._results: list[CategoryResult] = []
 
     def category_ready(self, category, checks_to_run) -> None:  # noqa: ANN001 - matches Protocol structurally
@@ -88,6 +91,7 @@ class _IncrementalReportWriter:
             generated_at=datetime.now(timezone.utc),
             category_results=list(self._results),
             out_of_scope=[],
+            client_name=self._client_name,
         )
         self._md_path.write_text(render(partial_report), encoding="utf-8")
 
@@ -110,18 +114,22 @@ def _slugify(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
-def _prompt_for_client_report_path() -> Path:
+def _prompt_for_client_report_path() -> tuple[Path, str]:
     """Prompts for the client's business name and returns
-    reports/<slug>-<timestamp-id>.md — done here, in the same process (and
-    via the same input() used by --step's Enter-gates) that will go on to
-    read every subsequent keypress, rather than in a wrapping shell script.
-    Handing stdin off between a bash `read` and a freshly-spawned Python
-    subprocess is exactly the kind of thing that can leak a buffered
-    keystroke through under Git Bash/mintty — confirmed live: the Enter that
-    submitted the business name was silently satisfying category 1's --step
-    gate too, so category 1 ran without ever waiting for a real keypress.
-    Keeping the whole interactive sequence in one process's input() calls
-    avoids that boundary entirely.
+    (reports/<slug>-<timestamp-id>.md, business_name) — done here, in the
+    same process (and via the same input() used by --step's Enter-gates)
+    that will go on to read every subsequent keypress, rather than in a
+    wrapping shell script. Handing stdin off between a bash `read` and a
+    freshly-spawned Python subprocess is exactly the kind of thing that can
+    leak a buffered keystroke through under Git Bash/mintty — confirmed
+    live: the Enter that submitted the business name was silently
+    satisfying category 1's --step gate too, so category 1 ran without ever
+    waiting for a real keypress. Keeping the whole interactive sequence in
+    one process's input() calls avoids that boundary entirely.
+
+    The business name is also threaded into the report's title (see
+    report/markdown.py) — not just used to build the filename — so the
+    same value collected here shows up in the actual deliverable.
     """
     business_name = input("Client's business name: ").strip()
     if not business_name:
@@ -134,12 +142,59 @@ def _prompt_for_client_report_path() -> Path:
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     reports_dir = Path("reports")
     reports_dir.mkdir(parents=True, exist_ok=True)
-    return reports_dir / f"{slug}-{timestamp}.md"
+    return reports_dir / f"{slug}-{timestamp}.md", business_name
+
+
+@contextmanager
+def _acquire_connection(
+    dsn: str | None, ssh_connect: bool, console: Console
+) -> Iterator[tuple[psycopg.Connection, str]]:
+    """Yields (connection, target_label) via one of two paths:
+
+    - --ssh-connect: prompts for a bastion-host SSH tunnel (ssh_tunnel.py),
+      then Postgres-level credentials over that tunnel (db_login.py) — two
+      separate modules since they're genuinely separate concerns (transport
+      vs. database auth). target_label uses the *real* remote host/port the
+      client would recognize, not the ephemeral 127.0.0.1:<local port> the
+      tunnel happens to forward through, which would be a meaningless label
+      in the report.
+    - plain --dsn/$INTEGRI_DSN: the existing direct-connection path,
+      unchanged.
+
+    Either way, the actual read-only guarantee comes from db.py's
+    connect_read_only alone — this function only ever decides how the DSN
+    given to it gets built, never anything about connection safety.
+    """
+    if ssh_connect:
+        tunnel_config = ssh_tunnel.prompt_for_ssh_tunnel_config()
+        with ssh_tunnel.open_tunnel(tunnel_config) as local_port:
+            login_config = db_login.prompt_for_db_login(default_host="127.0.0.1", default_port=local_port)
+            with db_login.connect(login_config) as conn:
+                console.print("[bold green]Database connection success.[/bold green]")
+                target_label = f"{tunnel_config.remote_host}:{tunnel_config.remote_port}/{login_config.database}"
+                yield conn, target_label
+        return
+
+    if not dsn:
+        typer.echo("Either --dsn (or $INTEGRI_DSN) or --ssh-connect is required.", err=True)
+        raise typer.Exit(code=1)
+    with connect_read_only(dsn) as conn:
+        yield conn, _sanitize_dsn_for_label(dsn)
 
 
 @app.command()
 def run(
-    dsn: str = typer.Option(..., "--dsn", envvar="INTEGRI_DSN", help="Postgres connection string."),
+    dsn: Optional[str] = typer.Option(
+        None, "--dsn", envvar="INTEGRI_DSN", help="Postgres connection string. Required unless --ssh-connect is used."
+    ),
+    ssh_connect: bool = typer.Option(
+        False,
+        "--ssh-connect/--no-ssh-connect",
+        help=(
+            "Connect via an SSH tunnel to a bastion/jump host instead of a direct DSN — prompts "
+            "for the bastion, an SSH key path, and Postgres credentials. Takes priority over --dsn."
+        ),
+    ),
     output: Optional[Path] = typer.Option(
         None, "--output", "-o", help="Write the Markdown report here instead of reports/audit-<timestamp>.md."
     ),
@@ -169,19 +224,16 @@ def run(
     ),
     pdf: bool = typer.Option(True, "--pdf/--no-pdf", help="Also generate a PDF via Pandoc if available."),
 ) -> None:
-    """Run the audit against DSN and write a Markdown (and, if possible, PDF) report."""
-    config = AuditConfig(
-        dsn=dsn,
-        category_filter=set(category) if category else None,
-        check_filter=set(check) if check else None,
-    )
+    """Run the audit against DSN (or an SSH-tunneled connection) and write a
+    Markdown (and, if possible, PDF) report."""
+    console = Console(stderr=True)
+    show_progress = progress if progress is not None else _is_interactive_terminal(console)
 
-    # Resolved up front (not after the run) so the incremental report writer
-    # below has somewhere to write as each category finishes.
+    client_name: Optional[str] = None
     if output is not None:
         md_path = output
     elif ask_client_name:
-        md_path = _prompt_for_client_report_path()
+        md_path, client_name = _prompt_for_client_report_path()
     else:
         reports_dir = Path("reports")
         reports_dir.mkdir(parents=True, exist_ok=True)
@@ -189,17 +241,19 @@ def run(
         md_path = reports_dir / f"audit-{timestamp}.md"
     md_path.parent.mkdir(parents=True, exist_ok=True)
 
-    console = Console(stderr=True)
-    show_progress = progress if progress is not None else _is_interactive_terminal(console)
-    target_label = _sanitize_dsn_for_label(dsn)
+    with _acquire_connection(dsn, ssh_connect, console) as (conn, target_label):
+        config = AuditConfig(
+            dsn=dsn,
+            category_filter=set(category) if category else None,
+            check_filter=set(check) if check else None,
+        )
 
-    reporters: list[AuditReporter] = [_IncrementalReportWriter(md_path, target_label)]
-    if show_progress:
-        reporters.append(CliProgressReporter(interactive=step))
-    reporter = CompositeReporter(reporters)
+        reporters: list[AuditReporter] = [_IncrementalReportWriter(md_path, target_label, client_name=client_name)]
+        if show_progress:
+            reporters.append(CliProgressReporter(interactive=step))
+        reporter = CompositeReporter(reporters)
 
-    with connect_read_only(dsn) as conn:
-        report = run_audit(conn, config, target_label=target_label, reporter=reporter)
+        report = run_audit(conn, config, target_label=target_label, reporter=reporter, client_name=client_name)
 
     console.print("[bold green]Audit complete.[/bold green]")
 

@@ -8,6 +8,24 @@ def _config(**overrides) -> AuditConfig:
     return AuditConfig(dsn="postgresql://example", **overrides)
 
 
+def test_run_audit_passes_client_name_through_to_the_report(monkeypatch):
+    monkeypatch.setattr(runner.registry, "discover_categories", lambda: [])
+
+    report = runner.run_audit(
+        conn=object(), config=_config(), target_label="test-db", client_name="Sample Company"
+    )
+
+    assert report.client_name == "Sample Company"
+
+
+def test_run_audit_client_name_defaults_to_none(monkeypatch):
+    monkeypatch.setattr(runner.registry, "discover_categories", lambda: [])
+
+    report = runner.run_audit(conn=object(), config=_config(), target_label="test-db")
+
+    assert report.client_name is None
+
+
 def test_run_audit_collects_findings_from_checks(monkeypatch, make_finding):
     finding = make_finding(check_id="99.01")
     category = CategoryModule(

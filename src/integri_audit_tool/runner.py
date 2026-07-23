@@ -17,6 +17,7 @@ def run_audit(
     config: AuditConfig,
     target_label: str,
     reporter: AuditReporter | None = None,
+    client_name: str | None = None,
 ) -> AuditReport:
     reporter = reporter or NullReporter()
     all_categories = registry.discover_categories()
@@ -101,6 +102,7 @@ def run_audit(
         generated_at=datetime.now(timezone.utc),
         category_results=results,
         out_of_scope=out_of_scope_notes,
+        client_name=client_name,
     )
     reporter.audit_completed(report)
     return report

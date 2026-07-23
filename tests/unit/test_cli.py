@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 import typer
 from rich.console import Console
 
+from integri_audit_tool import cli, db_login, ssh_tunnel
 from integri_audit_tool.cli import (
     _IncrementalReportWriter,
     _is_interactive_terminal,
@@ -93,12 +96,13 @@ def test_prompt_for_client_report_path_builds_expected_filename(monkeypatch, tmp
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("builtins.input", lambda prompt="": "Acme Test Co")
 
-    path = _prompt_for_client_report_path()
+    path, business_name = _prompt_for_client_report_path()
 
     assert path.parent.resolve() == (tmp_path / "reports").resolve()
     assert path.name.startswith("acme-test-co-")
     assert path.name.endswith(".md")
     assert path.parent.is_dir()
+    assert business_name == "Acme Test Co"
 
 
 def test_prompt_for_client_report_path_rejects_empty_name(monkeypatch, tmp_path):
@@ -115,3 +119,60 @@ def test_prompt_for_client_report_path_rejects_name_with_no_letters_or_digits(mo
 
     with pytest.raises(typer.Exit):
         _prompt_for_client_report_path()
+
+
+def test_acquire_connection_plain_dsn_path(mocker):
+    fake_conn = mocker.Mock()
+    mock_connect_read_only = mocker.patch.object(cli, "connect_read_only")
+    mock_connect_read_only.return_value.__enter__ = mocker.Mock(return_value=fake_conn)
+    mock_connect_read_only.return_value.__exit__ = mocker.Mock(return_value=False)
+    console = Console(stderr=True)
+
+    with cli._acquire_connection("postgresql://user:pass@host:5432/dbname", False, console) as (
+        conn,
+        target_label,
+    ):
+        assert conn is fake_conn
+        assert target_label == "postgresql://host:5432/dbname"  # credentials stripped
+
+
+def test_acquire_connection_requires_dsn_or_ssh_connect():
+    console = Console(stderr=True)
+
+    with pytest.raises(typer.Exit):
+        with cli._acquire_connection(None, False, console):
+            pass
+
+
+def test_acquire_connection_ssh_path_prints_success_and_builds_target_label(mocker):
+    fake_conn = mocker.Mock()
+    tunnel_config = ssh_tunnel.SshTunnelConfig(
+        bastion_host="bastion.example.com",
+        bastion_port=22,
+        username="auditor",
+        key_path=Path("/tmp/key.pem"),
+        remote_host="10.0.0.5",
+        remote_port=5432,
+    )
+    mocker.patch.object(cli.ssh_tunnel, "prompt_for_ssh_tunnel_config", return_value=tunnel_config)
+    mock_open_tunnel = mocker.patch.object(cli.ssh_tunnel, "open_tunnel")
+    mock_open_tunnel.return_value.__enter__ = mocker.Mock(return_value=54321)
+    mock_open_tunnel.return_value.__exit__ = mocker.Mock(return_value=False)
+
+    login_config = db_login.DbLoginConfig(
+        host="127.0.0.1", port=54321, username="auditor", password="x", database="synthetic_client"
+    )
+    mocker.patch.object(cli.db_login, "prompt_for_db_login", return_value=login_config)
+    mock_connect = mocker.patch.object(cli.db_login, "connect")
+    mock_connect.return_value.__enter__ = mocker.Mock(return_value=fake_conn)
+    mock_connect.return_value.__exit__ = mocker.Mock(return_value=False)
+
+    console = Console(stderr=True)
+    with cli._acquire_connection(None, True, console) as (conn, target_label):
+        assert conn is fake_conn
+        # The *real* remote host/port a client would recognize, not the
+        # ephemeral local tunnel port (54321) — that would be meaningless
+        # in a report.
+        assert target_label == "10.0.0.5:5432/synthetic_client"
+
+    cli.db_login.prompt_for_db_login.assert_called_once_with(default_host="127.0.0.1", default_port=54321)

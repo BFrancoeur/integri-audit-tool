@@ -40,6 +40,48 @@ def test_render_includes_all_required_sections(make_finding):
     assert "Category 12: Compliance & Data Privacy" in rendered
 
 
+def test_render_title_uses_client_name_and_database_name_when_available():
+    report = AuditReport(
+        target_label="127.0.0.1:5432/sample_company",
+        generated_at=datetime(2026, 7, 22, tzinfo=timezone.utc),
+        category_results=[],
+        client_name="Sample Company",
+    )
+
+    rendered = render(report)
+
+    assert "# Sample Company Database and Search Audit for sample_company" in rendered
+    assert "Postgres Database & Search Audit Report" not in rendered
+
+
+def test_render_title_falls_back_to_generic_label_without_client_name():
+    """Ad hoc single-category runs (ia-schema et al.) never prompt for a client
+    name, so the title needs a sensible fallback rather than "None Database..."."""
+    report = AuditReport(
+        target_label="127.0.0.1:5432/sample_company",
+        generated_at=datetime(2026, 7, 22, tzinfo=timezone.utc),
+        category_results=[],
+    )
+
+    rendered = render(report)
+
+    assert "# Postgres Database & Search Audit Report — 127.0.0.1:5432/sample_company" in rendered
+
+
+def test_render_date_has_no_timestamp():
+    report = AuditReport(
+        target_label="example.db:5432",
+        generated_at=datetime(2026, 7, 22, 18, 24, 45, tzinfo=timezone.utc),
+        category_results=[],
+    )
+
+    rendered = render(report)
+
+    assert "_Generated: July 22, 2026_" in rendered
+    assert "18:24:45" not in rendered
+    assert "T" not in rendered.split("_Generated:")[1].split("_")[0]
+
+
 def test_render_handles_no_findings():
     report = AuditReport(
         target_label="empty-db",

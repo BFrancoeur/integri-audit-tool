@@ -166,11 +166,28 @@ def _render_remediation_phases(report: AuditReport) -> str:
     return "\n".join(lines)
 
 
+def _database_name_from_label(target_label: str) -> str:
+    """target_label is always "host:port/dbname" (see cli.py's
+    _sanitize_dsn_for_label / _acquire_connection) — the part after the
+    last "/" is the database name."""
+    return target_label.rsplit("/", 1)[-1] if "/" in target_label else target_label
+
+
+def _render_title(report: AuditReport) -> str:
+    if report.client_name:
+        database_name = _database_name_from_label(report.target_label)
+        return f"# {report.client_name} Database and Search Audit for {database_name}"
+    # Fallback for runs that never collected a client name (e.g. ad hoc
+    # single-category runs via ia-schema et al., not the ia run/
+    # --ask-client-name path) — the generic label this always showed before.
+    return f"# Postgres Database & Search Audit Report — {report.target_label}"
+
+
 def render(report: AuditReport) -> str:
     sections = [
-        f"# Postgres Database & Search Audit Report — {report.target_label}",
+        _render_title(report),
         "",
-        f"_Generated: {report.generated_at.isoformat()}_",
+        f"_Generated: {report.generated_at.strftime('%B %d, %Y')}_",
         "",
         _render_executive_summary(report),
         "",

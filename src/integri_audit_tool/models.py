@@ -52,3 +52,7 @@ class AuditReport:
     generated_at: datetime
     category_results: list[CategoryResult]
     out_of_scope: list[str] = field(default_factory=lambda: [CATEGORY_12_OUT_OF_SCOPE_NOTE])
+    client_name: str | None = None
+    """The client's business name, if collected (--ask-client-name). Drives the
+    report title; falls back to a generic title when not set, e.g. for
+    ad hoc single-category runs (ia-schema et al.) that never prompt for it."""
