@@ -47,4 +47,71 @@ def test_render_handles_no_findings():
         category_results=[],
     )
     rendered = render(report)
-    assert "No findings were recorded" in rendered
+    assert "recorded no findings" in rendered
+
+
+def test_executive_summary_reads_as_prose_not_a_bracket_tagged_list(make_finding):
+    finding = make_finding(
+        severity=Severity.HIGH,
+        title="Table without a primary key: sessions",
+        business_impact="Without a primary key, rows can't be reliably deduplicated.",
+    )
+    report = AuditReport(
+        target_label="example.db:5432",
+        generated_at=datetime(2026, 7, 22, tzinfo=timezone.utc),
+        category_results=[
+            CategoryResult(category_number=1, category_name="Schema", status="completed", findings=[finding])
+        ],
+    )
+
+    rendered = render(report)
+    summary = rendered.split("## Executive Summary")[1].split("## Findings Summary Table")[0]
+
+    assert "[High]" not in summary  # no bracket-tagged severity, styled as prose instead
+    assert "This audit reviewed example.db:5432" in summary
+    assert "1 of these are Critical or High severity" in summary
+    assert "**High — Table without a primary key: sessions.**" in summary
+    assert "Without a primary key, rows can't be reliably deduplicated." in summary
+
+
+def test_executive_summary_notes_when_nothing_is_critical_or_high(make_finding):
+    finding = make_finding(severity=Severity.LOW)
+    report = AuditReport(
+        target_label="example.db:5432",
+        generated_at=datetime(2026, 7, 22, tzinfo=timezone.utc),
+        category_results=[
+            CategoryResult(category_number=1, category_name="Schema", status="completed", findings=[finding])
+        ],
+    )
+
+    rendered = render(report)
+
+    assert "None are Critical or High severity" in rendered
+
+
+def test_findings_summary_table_uses_check_id_instead_of_long_category_name(make_finding):
+    """The Category column used to repeat the same long category name for every row in
+    that category — nothing but wasted table width. check_id is compact, unique per row,
+    and points straight to the matching heading in Detailed Findings."""
+    finding = make_finding(
+        check_id="01.06",
+        business_impact="This exact sentence should not appear in the summary table.",
+    )
+    report = AuditReport(
+        target_label="example.db:5432",
+        generated_at=datetime(2026, 7, 22, tzinfo=timezone.utc),
+        category_results=[
+            CategoryResult(category_number=1, category_name="Schema", status="completed", findings=[finding])
+        ],
+    )
+
+    rendered = render(report)
+    table_section = rendered.split("## Findings Summary Table")[1].split("## Detailed Findings")[0]
+
+    assert "| # | Check | Finding | Severity |" in table_section
+    assert "Business Impact" not in table_section
+    assert "Category" not in table_section
+    assert "01.06" in table_section
+    assert "This exact sentence should not appear in the summary table." not in table_section
+    # ...but it's still present in Detailed Findings, where full detail belongs.
+    assert "This exact sentence should not appear in the summary table." in rendered

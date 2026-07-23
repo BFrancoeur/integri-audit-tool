@@ -26,16 +26,44 @@ def _render_executive_summary(report: AuditReport) -> str:
 
     lines = ["## Executive Summary", ""]
     if not findings:
-        lines.append("No findings were recorded across the assessed categories.")
-    else:
-        summary_parts = ", ".join(
-            f"{count} {severity.value}" for severity, count in counts.items() if count
+        lines.append(
+            f"This audit reviewed {report.target_label} across all assessed categories and "
+            "recorded no findings."
         )
-        lines.append(f"**Findings by severity:** {summary_parts}")
         lines.append("")
-        lines.append("**Top findings:**")
-        for finding in findings[:5]:
-            lines.append(f"- [{finding.severity.value}] {finding.title} ({finding.category_name})")
+        lines.append(
+            "Recommended next step: scope a remediation engagement for Critical/High findings "
+            "first (see Suggested Remediation Phases below); this report covers the audit phase only."
+        )
+        return "\n".join(lines)
+
+    total = len(findings)
+    severity_phrase = ", ".join(
+        f"{count} {severity.value}" for severity, count in counts.items() if count
+    )
+    urgent_count = counts[Severity.CRITICAL] + counts[Severity.HIGH]
+    if urgent_count:
+        urgency_sentence = (
+            f"{urgent_count} of these are Critical or High severity and should be treated as "
+            "priorities; the rest are lower-severity items that add up over time rather than "
+            "posing immediate risk."
+        )
+    else:
+        urgency_sentence = (
+            "None are Critical or High severity — the findings below are worth addressing as "
+            "part of routine hardening rather than urgent risk."
+        )
+
+    lines.append(
+        f"This audit reviewed {report.target_label} across all assessed categories and found "
+        f"{total} finding{'s' if total != 1 else ''} ({severity_phrase}). {urgency_sentence}"
+    )
+    lines.append("")
+    lines.append("**What needs attention first:**")
+    lines.append("")
+    for finding in findings[:5]:
+        detail = f" {finding.business_impact}" if finding.business_impact else ""
+        lines.append(f"- **{finding.severity.value} — {finding.title}.**{detail}")
     lines.append("")
     lines.append(
         "Recommended next step: scope a remediation engagement for Critical/High findings "
@@ -44,21 +72,33 @@ def _render_executive_summary(report: AuditReport) -> str:
     return "\n".join(lines)
 
 
+# Pandoc's pipe-table -> LaTeX conversion sizes each column *relative to the
+# number of dashes in its separator-row cell*, not to actual content length —
+# an equal-width separator ("|---|---|---|---|") renders as four equal-width
+# PDF columns regardless of how much text is actually in each one, which is
+# what made "Finding" wrap onto 3-4 lines while "#"/"Check"/"Severity" sat
+# mostly empty. This is documented Pandoc behavior, not a workaround: give
+# the column that actually holds prose (Finding) most of the dashes.
+_TABLE_COL_WIDTHS = {"#": 5, "Check": 8, "Finding": 82, "Severity": 16}
+
+
 def _render_findings_summary_table(report: AuditReport) -> str:
     findings = _all_findings(report)
+    header = "| " + " | ".join(_TABLE_COL_WIDTHS) + " |"
+    separator = "|" + "|".join("-" * width for width in _TABLE_COL_WIDTHS.values()) + "|"
     lines = [
         "## Findings Summary Table",
         "",
-        "| # | Category | Finding | Severity | Business Impact |",
-        "|---|---|---|---|---|",
+        "A scannable index only — observation, evidence, business impact, and recommended "
+        "direction for every finding are in Detailed Findings below, under the matching check id.",
+        "",
+        header,
+        separator,
     ]
     if not findings:
-        lines.append("| - | - | No findings | - | - |")
+        lines.append("| - | - | No findings | - |")
     for i, finding in enumerate(findings, start=1):
-        lines.append(
-            f"| {i} | {finding.category_name} | {finding.title} | {finding.severity.value} "
-            f"| {finding.business_impact or '-'} |"
-        )
+        lines.append(f"| {i} | {finding.check_id} | {finding.title} | {finding.severity.value} |")
     return "\n".join(lines)
 
 
