@@ -53,7 +53,7 @@ ia() {
     printf "  %-11s %s\n" "ia-mon"     "10. Monitoring & Observability"
     printf "  %-11s %s\n" "ia-docs"    "11. Documentation & Institutional Knowledge"
     echo ""
-    printf "  %-11s %s\n" "ia-db-up"   "Set up/reuse the synthetic test database"
+    printf "  %-11s %s\n" "ia-db-up"   "Set up/reuse the synthetic test database, auto-exports INTEGRI_DSN"
     printf "  %-11s %s\n" "ia-db-down" "Tear down the synthetic test database"
 }
 
@@ -71,7 +71,29 @@ alias ia-backup="$_integri_audit_tool_root/scripts/run-category.sh 9"   # Backup
 alias ia-mon="$_integri_audit_tool_root/scripts/run-category.sh 10"     # Monitoring & Observability
 alias ia-docs="$_integri_audit_tool_root/scripts/run-category.sh 11"    # Documentation & Institutional Knowledge
 
-alias ia-db-up="$_integri_audit_tool_root/scripts/setup-synthetic-db.sh"
-alias ia-db-down="$_integri_audit_tool_root/scripts/teardown-synthetic-db.sh"
+# Functions, not plain aliases: a script run as a subprocess can't export a
+# variable into the shell that called it, so setup-synthetic-db.sh prints
+# *only* the bare DSN to stdout (everything else goes to stderr) and this
+# function captures + exports it directly — no more copy-pasting the
+# printed `export INTEGRI_DSN=...` line by hand.
+ia-db-up() {
+    local _root dsn
+    _root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    dsn="$("$_root/scripts/setup-synthetic-db.sh" "$@")" || return $?
+    export INTEGRI_DSN="$dsn"
+    echo "INTEGRI_DSN set for this shell session: $INTEGRI_DSN"
+}
+
+ia-db-down() {
+    local _root
+    _root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    "$_root/scripts/teardown-synthetic-db.sh" "$@" || return $?
+    # Only clear it if it still points at the synthetic db this just tore
+    # down — never clobber a DSN you set yourself for something else.
+    if [ "${INTEGRI_DSN:-}" = "postgresql://postgres:synthetic@localhost:55432/synthetic_client" ]; then
+        unset INTEGRI_DSN
+        echo "INTEGRI_DSN unset."
+    fi
+}
 
 unset _integri_audit_tool_root

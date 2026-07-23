@@ -79,6 +79,10 @@ Run `ia --help` any time to list them all without leaving the CLI:
 ```
 Integri Audit Tool — per-category aliases (each forwards extra args to 'integri-audit run')
 
+  Command     Description
+  -------     -----------
+  ia run      Full audit — prompts for client business name, names the report after it
+
   Alias       Category
   -----       --------
   ia-schema   1. Schema Design & Normalization Boundaries
@@ -93,7 +97,7 @@ Integri Audit Tool — per-category aliases (each forwards extra args to 'integr
   ia-mon      10. Monitoring & Observability
   ia-docs     11. Documentation & Institutional Knowledge
 
-  ia-db-up    Set up/reuse the synthetic test database
+  ia-db-up    Set up/reuse the synthetic test database, auto-exports INTEGRI_DSN
   ia-db-down  Tear down the synthetic test database
 ```
 
@@ -115,15 +119,15 @@ Any extra arguments (`--no-pdf`, `-c`/`-k` filters, etc.) forward to `integri-au
 `scripts/setup-synthetic-db.sh` spins up a persistent, local Postgres container (`integri-synthetic-db`, port 55432) seeded from `scripts/synthetic-db/seed.sql` with a deliberately messy, client-shaped schema — a `customers`/`orders`/`products`/`sessions` set of tables that intentionally reproduces a specific rubric anti-pattern per bullet (an FK-shaped column with no constraint, JSONB key/type drift, an unused index, a table with no primary key, RLS enabled with zero policies, an unvalidated FK, TOASTed JSONB, dead-tuple bloat with autovacuum disabled, and more), plus a burst of generated query traffic so the `pg_stat_statements`-backed checks (N+1 candidates, OFFSET pagination, slow queries) have something real to find too. It's meant for exercising checks by hand, repeatedly, without needing a real client database:
 
 ```bash
-./scripts/setup-synthetic-db.sh              # create if missing, else reuse as-is
-./scripts/setup-synthetic-db.sh --recreate   # wipe and rebuild from scratch
-# or: ia-db-up
+ia-db-up                    # create if missing (or reuse as-is), auto-exports INTEGRI_DSN
+ia-db-up --recreate         # wipe and rebuild from scratch
 
-export INTEGRI_DSN="postgresql://postgres:synthetic@localhost:55432/synthetic_client"
 ia-schema            # or any other ia-* alias / run-check.sh / run-category.sh
 
-./scripts/teardown-synthetic-db.sh   # or: ia-db-down
+ia-db-down                  # tears the container down, unsets INTEGRI_DSN if it's still pointed at it
 ```
+
+`ia-db-up`/`ia-db-down` are shell **functions**, not plain aliases to the underlying scripts, specifically so they can `export`/`unset` `INTEGRI_DSN` in your actual shell — a script invoked as a subprocess can't set an environment variable in the shell that called it, no matter what it prints. `setup-synthetic-db.sh` sends all its progress output to stderr and prints *only* the bare DSN to stdout as its last line; the function captures that via command substitution and exports it, so nothing needs copy-pasting.
 
 A full run against it currently surfaces genuine findings in every automated category (1–11) — confirmed via manual CLI runs, not just design intent. One gotcha it exists to document: the seeded `sessions` table needs its dead-tuple bloat (07.04/10.03) to survive until an audit actually runs, but Postgres's own autovacuum daemon was cleaning it up within its default ~1-minute naptime before a manual audit got around to it, making those two findings flaky. Fixed by starting the container with `-c autovacuum=off` cluster-wide — deliberately not a per-table `reloptions` override, since 07.04 specifically requires `reloptions IS NULL` to fire (it's checking for bloat on cluster-wide defaults, not a tuned-and-still-struggling table).
 
