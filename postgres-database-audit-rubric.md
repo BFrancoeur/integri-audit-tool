@@ -178,6 +178,19 @@
 
 ---
 
+## Explicitly Out of Scope: Network & Infrastructure Security
+
+**This is a database audit, not a network or infrastructure security assessment.** The boundary below is deliberate, not a placeholder for future tooling — these items sit in a different discipline with a different authorization and liability profile than reading a database with credentials a client has already granted. Folding them into a database audit, even informally, risks scope creep into unauthorized security testing.
+
+- Network-level security: open port scanning, firewall/security-group configuration review, VPN or bastion-host setup, exposed-service enumeration.
+- Penetration testing or vulnerability scanning of any kind, against the database host, application servers, or surrounding infrastructure.
+- OS/host-level hardening (patch levels, running services, filesystem permissions) beyond what's directly visible through the database connection itself.
+- Application-layer security (authentication flows, session management, API security) unless the finding is directly visible from within the database — see Category 8's role, row-level-security, and audit-trail checks for what that looks like in practice.
+
+**Why this boundary exists:** Testing any of the above without separate, explicit written authorization is a materially different ask than auditing a database with credentials already granted for that purpose — it starts to look like unauthorized security testing regardless of intent. If network/infrastructure security work is ever offered as part of this service, it should be scoped, authorized, priced, and (if applicable) insured as its own distinct engagement — not backed into through scope creep on a database audit.
+
+---
+
 ## Report Structure Template
 
 ```
