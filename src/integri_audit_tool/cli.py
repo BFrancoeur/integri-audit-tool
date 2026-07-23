@@ -15,7 +15,7 @@ import psycopg
 import typer
 from rich.console import Console
 
-from integri_audit_tool import db_login, pdf_export, ssh_tunnel
+from integri_audit_tool import analytics, db_login, pdf_export, ssh_tunnel
 from integri_audit_tool.cli_progress_reporter import CliProgressReporter
 from integri_audit_tool.config import AuditConfig
 from integri_audit_tool.db import connect_read_only
@@ -106,6 +106,18 @@ def _sanitize_dsn_for_label(dsn: str) -> str:
     if parts.port:
         netloc += f":{parts.port}"
     return urlunsplit((parts.scheme, netloc, parts.path, "", ""))
+
+
+def _looks_like_synthetic_db(dsn: str | None) -> bool:
+    """Convenience auto-tag for analytics.py's is_synthetic flag: matches
+    the one fixed local synthetic-db setup (scripts/setup-synthetic-db.sh,
+    always 127.0.0.1:55432) so everyday ia-schema/ia run testing against it
+    doesn't need an explicit flag. This is only a convenience default, not
+    the authoritative mechanism — a future corpus of many differently-
+    ported/named synthetic databases (randomized seeds, varying sizes) will
+    rely on --synthetic being passed explicitly instead, since no DSN
+    pattern can generalize to arbitrary generated databases."""
+    return dsn is not None and "127.0.0.1:55432" in dsn
 
 
 def _slugify(name: str) -> str:
@@ -223,6 +235,23 @@ def run(
         help="Pause after each category's readiness message and wait for Enter before running it. Requires the progress UI.",
     ),
     pdf: bool = typer.Option(True, "--pdf/--no-pdf", help="Also generate a PDF via Pandoc if available."),
+    analytics_enabled: bool = typer.Option(
+        True,
+        "--analytics/--no-analytics",
+        help="Persist this run's findings to the local analytics database (analytics.db) for cross-run analysis.",
+    ),
+    synthetic: bool = typer.Option(
+        False,
+        "--synthetic/--no-synthetic",
+        help=(
+            "Tag this run as synthetic/training data in the analytics database, rather than a real "
+            "client audit. Auto-detected for the standard local synthetic db (127.0.0.1:55432); pass "
+            "explicitly for any other synthetic/test database."
+        ),
+    ),
+    analytics_db: Path = typer.Option(
+        analytics.DEFAULT_DB_PATH, "--analytics-db", help="Path to the analytics SQLite database."
+    ),
 ) -> None:
     """Run the audit against DSN (or an SSH-tunneled connection) and write a
     Markdown (and, if possible, PDF) report."""
@@ -251,11 +280,25 @@ def run(
         reporters: list[AuditReporter] = [_IncrementalReportWriter(md_path, target_label, client_name=client_name)]
         if show_progress:
             reporters.append(CliProgressReporter(interactive=step))
+        if analytics_enabled:
+            reporters.append(
+                analytics.AuditDatabaseWriter(
+                    target_label,
+                    client_name=client_name,
+                    is_synthetic=synthetic or _looks_like_synthetic_db(dsn),
+                    category_filter=",".join(str(c) for c in category) if category else None,
+                    check_filter=",".join(check) if check else None,
+                    db_path=analytics_db,
+                )
+            )
         reporter = CompositeReporter(reporters)
 
         report = run_audit(conn, config, target_label=target_label, reporter=reporter, client_name=client_name)
 
     console.print("[bold green]Audit complete.[/bold green]")
+    if analytics_enabled:
+        tag = "synthetic/training" if (synthetic or _looks_like_synthetic_db(dsn)) else "client"
+        console.print(f"Findings recorded to {analytics_db.resolve()} (tagged: {tag}).")
 
     console.print("Generating report.")
     md_path.write_text(render(report), encoding="utf-8")

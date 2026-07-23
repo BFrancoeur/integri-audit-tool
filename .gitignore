@@ -9,5 +9,6 @@ build/
 /report*.md
 /reports/
 /logs/
+/analytics.db
 .coverage
 htmlcov/

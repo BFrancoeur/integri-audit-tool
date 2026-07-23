@@ -12,6 +12,7 @@ from integri_audit_tool import cli, db_login, ssh_tunnel
 from integri_audit_tool.cli import (
     _IncrementalReportWriter,
     _is_interactive_terminal,
+    _looks_like_synthetic_db,
     _prompt_for_client_report_path,
     _slugify,
 )
@@ -78,6 +79,18 @@ def test_incremental_report_writer_accumulates_across_categories_in_the_same_fil
     content = md_path.read_text(encoding="utf-8")
     assert "Finding from category 1" in content
     assert "B" in content
+
+
+def test_looks_like_synthetic_db_matches_the_known_local_synthetic_db():
+    assert _looks_like_synthetic_db("postgresql://postgres:synthetic@127.0.0.1:55432/synthetic_client") is True
+
+
+def test_looks_like_synthetic_db_false_for_a_real_client_dsn():
+    assert _looks_like_synthetic_db("postgresql://user:pass@client-vps.example.com:5432/prod") is False
+
+
+def test_looks_like_synthetic_db_false_for_none():
+    assert _looks_like_synthetic_db(None) is False
 
 
 def test_slugify_lowercases_and_hyphenates():
