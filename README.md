@@ -63,6 +63,13 @@ scripts/run-category.sh 1          # run every check in category 1
 ```
 Each forwards any extra arguments to `integri-audit run`, so `--dsn`/`--output`/etc. still work to override `$INTEGRI_DSN`. There's deliberately no "run everything unattended" script yet — that's later work, once individual checks have been manually exercised enough to trust automating them.
 
+For quicker manual runs, `scripts/aliases.sh` defines a terse, category-relevant alias per rubric category (`ia-schema`, `ia-jsonb`, `ia-index`, `ia-fts`, `ia-query`, `ia-quality`, `ia-scale`, `ia-sec`, `ia-backup`, `ia-mon`, `ia-docs`) — each just forwards to `run-category.sh <N>` (and any extra args, e.g. `ia-sec --no-pdf`). Unlike the scripts above, this file must be **sourced**, not executed, since `alias` only affects the current shell:
+
+```bash
+source scripts/aliases.sh                                       # for the current shell session
+echo 'source /path/to/integri-audit-tool/scripts/aliases.sh' >> ~/.bashrc   # to make them permanent
+```
+
 Run the tests:
 
 ```bash
