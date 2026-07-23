@@ -223,8 +223,7 @@ def test_category_ready_interactive_survives_eof(tmp_path, capsys, monkeypatch):
 
 def test_audit_completed_no_longer_prints_its_own_banner(tmp_path, capsys):
     """The "Audit complete." message moved to cli.py, printed once, unconditionally —
-    CliProgressReporter.audit_completed now only stops the progress bar and reports
-    the failure log path, if any."""
+    CliProgressReporter.audit_completed now only reports the failure log path, if any."""
     reporter = CliProgressReporter(logs_dir=tmp_path / "logs")
 
     reporter.audit_completed(object())

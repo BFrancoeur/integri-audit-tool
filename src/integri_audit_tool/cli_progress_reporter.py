@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING
 
 from rich.console import Console
 from rich.markup import escape
-from rich.progress import BarColumn, Progress, TaskID, TextColumn
 
 from integri_audit_tool.models import Severity
 
@@ -55,32 +54,27 @@ _CATEGORY_ALIASES = {
 
 
 class CliProgressReporter:
-    """Concrete AuditReporter: readiness messages, a per-category progress bar,
-    green checkmarks / red X's per check with each check's findings (severity +
-    title) listed underneath so what was actually found is visible live, not
-    just a count, and errors logged to logs/*.log.
+    """Concrete AuditReporter: readiness messages, green checkmarks / red X's
+    per check with each check's findings (severity + title) listed
+    underneath so what was actually found is visible live, and errors
+    logged to logs/*.log.
+
+    Deliberately no progress bar: rich's `Progress` renders as a persistent,
+    self-redrawing region that interleaves unpredictably with the plain
+    `console.print()` calls used for readiness/check/finding lines — in
+    practice a prior category's bar could render *after* the next
+    category's readiness message. Since every check and its findings are
+    already printed line by line, the bar was redundant on top of being
+    visually broken; plain sequential output has no such ordering issue.
     """
 
     def __init__(self, logs_dir: Path | str = "logs", interactive: bool = False) -> None:
         self._console = Console(stderr=True)
-        self._progress: Progress | None = None
-        self._tasks: dict[int, TaskID] = {}
+        self._announced_categories: set[int] = set()
         self._logs_dir = Path(logs_dir)
         self._logger: logging.Logger | None = None
         self._log_path: Path | None = None
         self._interactive = interactive
-
-    def _ensure_progress(self) -> Progress:
-        if self._progress is None:
-            self._progress = Progress(
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TextColumn("{task.completed}/{task.total}"),
-                console=self._console,
-                transient=False,
-            )
-            self._progress.start()
-        return self._progress
 
     def _ensure_logger(self) -> logging.Logger:
         if self._logger is None:
@@ -100,11 +94,7 @@ class CliProgressReporter:
         self._console.print(f"\n[bold]Ready to run Category {category.number}: {category.name}[/bold]")
         if self._interactive:
             self._wait_for_enter()
-        progress = self._ensure_progress()
-        task_id = progress.add_task(
-            f"Category {category.number}", total=max(len(checks_to_run), 1)
-        )
-        self._tasks[category.number] = task_id
+        self._announced_categories.add(category.number)
 
     def _wait_for_enter(self) -> None:
         self._console.print("[dim]Press Enter to run this category's tests...[/dim]")
@@ -140,31 +130,22 @@ class CliProgressReporter:
             self._console.print(
                 f"    [{style}][{finding.severity.value}][/{style}] {escape(finding.title)}"
             )
-        self._advance(category)
 
     def check_failed(self, category: "CategoryModule", check: "Check", error: Exception) -> None:
         self._console.print(f"[bold red]✗ {check.id} failed[/bold red]: {error}")
         logger = self._ensure_logger()
         logger.error("Check %s (%s) failed: %s", check.id, category.name, error, exc_info=error)
-        self._advance(category)
-
-    def _advance(self, category: "CategoryModule") -> None:
-        task_id = self._tasks.get(category.number)
-        if task_id is not None and self._progress is not None:
-            self._progress.update(task_id, advance=1)
 
     def category_completed(self, category: "CategoryModule", result: "CategoryResult") -> None:
-        # Only announce categories this reporter actually started a progress
-        # bar for (skips categories the --check filter excluded entirely)
-        # and only when checks genuinely ran (not_applicable already printed
-        # its own message via category_not_applicable).
-        if category.number not in self._tasks or result.status != "completed":
+        # Only announce categories this reporter actually announced in the
+        # first place (skips categories the --check filter excluded
+        # entirely) and only when checks genuinely ran (not_applicable
+        # already printed its own message via category_not_applicable).
+        if category.number not in self._announced_categories or result.status != "completed":
             return
         alias = _CATEGORY_ALIASES.get(category.number, f"Category {category.number}")
         self._console.print(f"[bold]{alias} completed[/bold]")
 
     def audit_completed(self, report: "AuditReport") -> None:
-        if self._progress is not None:
-            self._progress.stop()
         if self._log_path is not None:
             self._console.print(f"[yellow]Some checks failed — details logged to {self._log_path}[/yellow]")
