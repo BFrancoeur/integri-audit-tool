@@ -21,8 +21,26 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskID, TextColumn
 
 if TYPE_CHECKING:
-    from integri_audit_tool.models import AuditReport, Finding
+    from integri_audit_tool.models import AuditReport, CategoryResult, Finding
     from integri_audit_tool.registry import Check, CategoryModule
+
+# Mirrors scripts/aliases.sh — kept here rather than derived from it since
+# that's a shell file, not something Python can introspect. Falls back to
+# "Category N" for any category number not listed (future categories added
+# to the rubric before an alias exists for them).
+_CATEGORY_ALIASES = {
+    1: "ia-schema",
+    2: "ia-jsonb",
+    3: "ia-index",
+    4: "ia-fts",
+    5: "ia-query",
+    6: "ia-quality",
+    7: "ia-scale",
+    8: "ia-sec",
+    9: "ia-backup",
+    10: "ia-mon",
+    11: "ia-docs",
+}
 
 
 class CliProgressReporter:
@@ -95,9 +113,18 @@ class CliProgressReporter:
         if task_id is not None and self._progress is not None:
             self._progress.update(task_id, advance=1)
 
+    def category_completed(self, category: "CategoryModule", result: "CategoryResult") -> None:
+        # Only announce categories this reporter actually started a progress
+        # bar for (skips categories the --check filter excluded entirely)
+        # and only when checks genuinely ran (not_applicable already printed
+        # its own message via category_not_applicable).
+        if category.number not in self._tasks or result.status != "completed":
+            return
+        alias = _CATEGORY_ALIASES.get(category.number, f"Category {category.number}")
+        self._console.print(f"[bold]{alias} completed[/bold]")
+
     def audit_completed(self, report: "AuditReport") -> None:
         if self._progress is not None:
             self._progress.stop()
-        self._console.print("\n[bold green]Audit completed![/bold green]")
         if self._log_path is not None:
             self._console.print(f"[yellow]Some checks failed — details logged to {self._log_path}[/yellow]")

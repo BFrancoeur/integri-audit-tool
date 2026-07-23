@@ -47,9 +47,9 @@ def run_audit(
         # applicability query against the database for a category that was
         # never going to run anything anyway.
         if config.check_filter is not None and not checks_to_run:
-            results.append(
-                CategoryResult(category_number=category.number, category_name=category.name, status="completed")
-            )
+            result = CategoryResult(category_number=category.number, category_name=category.name, status="completed")
+            results.append(result)
+            reporter.category_completed(category, result)
             continue
 
         reporter.category_ready(category, checks_to_run)
@@ -57,14 +57,14 @@ def run_audit(
         if category.applicability is not None and not category.applicability(conn):
             reason = "Category does not apply to this database (applicability check returned False)."
             reporter.category_not_applicable(category, reason)
-            results.append(
-                CategoryResult(
-                    category_number=category.number,
-                    category_name=category.name,
-                    status="not_applicable",
-                    na_reason=reason,
-                )
+            result = CategoryResult(
+                category_number=category.number,
+                category_name=category.name,
+                status="not_applicable",
+                na_reason=reason,
             )
+            results.append(result)
+            reporter.category_completed(category, result)
             continue
 
         findings: list[Finding] = []
@@ -87,14 +87,14 @@ def run_audit(
                     )
                 )
 
-        results.append(
-            CategoryResult(
-                category_number=category.number,
-                category_name=category.name,
-                status="completed",
-                findings=findings,
-            )
+        result = CategoryResult(
+            category_number=category.number,
+            category_name=category.name,
+            status="completed",
+            findings=findings,
         )
+        results.append(result)
+        reporter.category_completed(category, result)
 
     report = AuditReport(
         target_label=target_label,

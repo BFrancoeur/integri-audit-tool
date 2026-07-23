@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlsplit, urlunsplit
@@ -16,8 +16,10 @@ from integri_audit_tool import pdf_export
 from integri_audit_tool.cli_progress_reporter import CliProgressReporter
 from integri_audit_tool.config import AuditConfig
 from integri_audit_tool.db import connect_read_only
+from integri_audit_tool.models import AuditReport, CategoryResult
 from integri_audit_tool.registry import discover_categories
 from integri_audit_tool.report.markdown import render
+from integri_audit_tool.reporter import AuditReporter, CompositeReporter
 from integri_audit_tool.runner import run_audit
 
 # Some Windows consoles default stdout/stderr to a legacy codepage rather than
@@ -42,6 +44,54 @@ def _is_interactive_terminal(console: Console) -> bool:
     redirected" case. MSYSTEM is set by Git Bash/MSYS2 specifically (never by
     a real redirect, cron, or CI), so it's a safe fallback signal."""
     return console.is_terminal or "MSYSTEM" in os.environ
+
+
+class _IncrementalReportWriter:
+    """Writes a growing Markdown report to disk as each category finishes,
+    so the report file exists (and fills in) from the moment the first
+    category completes, instead of only appearing once the entire audit is
+    done. The authoritative final render — with correct out-of-scope notes,
+    which are only assembled once the whole run is complete — still happens
+    once in `run()` after `run_audit()` returns; this just keeps the same
+    file path progressively up to date in the meantime.
+
+    Implements only the one AuditReporter method it needs (Protocol
+    membership is structural, not every reporter needs every hook) plus a
+    couple of no-ops the type checker doesn't require but keep intent clear.
+    """
+
+    def __init__(self, md_path: Path, target_label: str) -> None:
+        self._md_path = md_path
+        self._target_label = target_label
+        self._results: list[CategoryResult] = []
+
+    def category_ready(self, category, checks_to_run) -> None:  # noqa: ANN001 - matches Protocol structurally
+        pass
+
+    def category_not_applicable(self, category, reason) -> None:  # noqa: ANN001
+        pass
+
+    def check_started(self, category, check) -> None:  # noqa: ANN001
+        pass
+
+    def check_succeeded(self, category, check, findings) -> None:  # noqa: ANN001
+        pass
+
+    def check_failed(self, category, check, error) -> None:  # noqa: ANN001
+        pass
+
+    def category_completed(self, category, result: CategoryResult) -> None:  # noqa: ANN001
+        self._results.append(result)
+        partial_report = AuditReport(
+            target_label=self._target_label,
+            generated_at=datetime.now(timezone.utc),
+            category_results=list(self._results),
+            out_of_scope=[],
+        )
+        self._md_path.write_text(render(partial_report), encoding="utf-8")
+
+    def audit_completed(self, report) -> None:  # noqa: ANN001
+        pass
 
 
 def _sanitize_dsn_for_label(dsn: str) -> str:
@@ -79,15 +129,8 @@ def run(
         check_filter=set(check) if check else None,
     )
 
-    console = Console(stderr=True)
-    show_progress = progress if progress is not None else _is_interactive_terminal(console)
-    reporter = CliProgressReporter() if show_progress else None
-
-    with connect_read_only(dsn) as conn:
-        report = run_audit(conn, config, target_label=_sanitize_dsn_for_label(dsn), reporter=reporter)
-
-    rendered = render(report)
-
+    # Resolved up front (not after the run) so the incremental report writer
+    # below has somewhere to write as each category finishes.
     if output is not None:
         md_path = output
     else:
@@ -95,10 +138,26 @@ def run(
         reports_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         md_path = reports_dir / f"audit-{timestamp}.md"
-
     md_path.parent.mkdir(parents=True, exist_ok=True)
-    md_path.write_text(rendered, encoding="utf-8")
+
+    console = Console(stderr=True)
+    show_progress = progress if progress is not None else _is_interactive_terminal(console)
+    target_label = _sanitize_dsn_for_label(dsn)
+
+    reporters: list[AuditReporter] = [_IncrementalReportWriter(md_path, target_label)]
+    if show_progress:
+        reporters.append(CliProgressReporter())
+    reporter = CompositeReporter(reporters)
+
+    with connect_read_only(dsn) as conn:
+        report = run_audit(conn, config, target_label=target_label, reporter=reporter)
+
+    console.print("[bold green]Audit complete.[/bold green]")
+
+    console.print("Generating report.")
+    md_path.write_text(render(report), encoding="utf-8")
     console.print(f"Report written to {md_path.resolve()}")
+    console.print("Generated report complete.")
 
     if pdf:
         pdf_path = md_path.with_suffix(".pdf")
@@ -108,8 +167,6 @@ def run(
             console.print(f"  {pdf_path.resolve().as_uri()}")
         except pdf_export.PdfConversionError as exc:
             console.print(f"[yellow]Skipped PDF generation: {exc}[/yellow]")
-
-    console.print("[bold green]Audit complete.[/bold green]")
 
 
 @app.command(name="list-checks")

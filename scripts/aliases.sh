@@ -15,12 +15,29 @@
 # Run `ia --help` any time to list them all without leaving the CLI.
 
 ia() {
+    # ${BASH_SOURCE[0]} inside a function is the file the function was
+    # *defined* in (this file), regardless of when/where it's later called —
+    # unlike the module-scope $_integri_audit_tool_root below, which is
+    # unset once sourcing finishes, so it can't be relied on here.
+    local _root
+    _root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+    if [ "$#" -gt 0 ] && [ "$1" = "run" ]; then
+        shift
+        "$_root/scripts/run-audit.sh" "$@"
+        return $?
+    fi
+
     if [ "$#" -gt 0 ] && [ "$1" != "--help" ] && [ "$1" != "-h" ]; then
         echo "Unknown option: $1. Try 'ia --help'." >&2
         return 1
     fi
 
     echo "Integri Audit Tool — per-category aliases (each forwards extra args to 'integri-audit run')"
+    echo ""
+    printf "  %-11s %s\n" "Command" "Description"
+    printf "  %-11s %s\n" "-------" "-----------"
+    printf "  %-11s %s\n" "ia run" "Full audit — prompts for client business name, names the report after it"
     echo ""
     printf "  %-11s %s\n" "Alias" "Category"
     printf "  %-11s %s\n" "-----" "--------"

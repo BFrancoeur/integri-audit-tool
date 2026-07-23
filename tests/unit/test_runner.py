@@ -132,6 +132,9 @@ class _RecordingReporter:
     def check_failed(self, category, check, error):
         self.events.append(("check_failed", check.id, str(error)))
 
+    def category_completed(self, category, result):
+        self.events.append(("category_completed", category.number, result.status))
+
     def audit_completed(self, report):
         self.events.append(("audit_completed",))
 
@@ -161,6 +164,7 @@ def test_run_audit_calls_reporter_hooks_in_order(monkeypatch, make_finding):
         ("check_succeeded", "99.01", 1),
         ("check_started", "99.02"),
         ("check_failed", "99.02", "nope"),
+        ("category_completed", 99, "completed"),
         ("audit_completed",),
     ]
 
@@ -176,6 +180,7 @@ def test_run_audit_calls_reporter_category_not_applicable(monkeypatch):
 
     assert ("category_ready", 99, []) in reporter.events
     assert any(event[0] == "category_not_applicable" for event in reporter.events)
+    assert ("category_completed", 99, "not_applicable") in reporter.events
     assert reporter.events[-1] == ("audit_completed",)
 
 
@@ -207,3 +212,7 @@ def test_run_audit_does_not_announce_category_with_no_matching_checks(monkeypatc
     assert category_ready_numbers == [1]
     assert applicability_calls == []  # never evaluated for the non-matching category
     assert [r.category_number for r in report.category_results] == [1, 2]  # still both in the report
+    # category_completed fires for every category regardless of announcement,
+    # so an incremental report writer always learns the final outcome.
+    category_completed_numbers = [e[1] for e in reporter.events if e[0] == "category_completed"]
+    assert category_completed_numbers == [1, 2]
