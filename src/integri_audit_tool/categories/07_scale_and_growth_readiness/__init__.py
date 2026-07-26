@@ -25,31 +25,36 @@ from integri_audit_tool.registry import Check, CategoryModule
 from . import checks
 
 CATEGORY = CategoryModule(
-    number=7,
+    slug="scale-and-growth-readiness",
     name="Scale & Growth Readiness",
     checks=[
         Check(
-            id="07.01",
+            slug="slow-queries",
+            rubric_bullet=1,
             description="At current row counts, are there any operations already showing measured degraded performance?",
             fn=checks.check_slow_queries,
         ),
         Check(
-            id="07.02",
+            slug="largest-tables",
+            rubric_bullet=2,
             description="Is table/index size growth tracked, with a stated volume threshold for architecture change?",
             fn=checks.check_largest_tables,
         ),
         Check(
-            id="07.03",
+            slug="tenant-columns-without-rls",
+            rubric_bullet=3,
             description="Does the architecture isolate tenant/category data access patterns?",
             fn=checks.check_tenant_columns_without_rls,
         ),
         Check(
-            id="07.04",
+            slug="high-bloat-tables-without-tuning",
+            rubric_bullet=4,
             description="Is autovacuum tuned for the table's write/update pattern, or left at defaults on a high-churn table?",
             fn=checks.check_high_bloat_tables_without_tuning,
         ),
         Check(
-            id="07.05",
+            slug="large-jsonb-on-hot-tables",
+            rubric_bullet=5,
             description="Are large JSONB documents causing TOAST-related overhead on frequently-accessed rows?",
             fn=checks.check_large_jsonb_on_hot_tables,
         ),

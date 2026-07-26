@@ -12,21 +12,24 @@ from integri_audit_tool.registry import Check, CategoryModule
 from . import checks
 
 CATEGORY = CategoryModule(
-    number=1,
+    slug="schema-design-and-normalization-boundaries",
     name="Schema Design & Normalization Boundaries",
     checks=[
         Check(
-            id="01.04",
+            slug="missing-foreign-keys",
+            rubric_bullet=4,
             description="Are foreign key constraints present where relationships exist?",
             fn=checks.check_missing_foreign_keys,
         ),
         Check(
-            id="01.05",
+            slug="schema-drift",
+            rubric_bullet=5,
             description="Is there evidence of schema drift — same concept represented differently across tables?",
             fn=checks.check_schema_drift,
         ),
         Check(
-            id="01.06",
+            slug="primary-key-consistency",
+            rubric_bullet=6,
             description="Are primary keys and identity columns used consistently?",
             fn=checks.check_primary_key_consistency,
         ),

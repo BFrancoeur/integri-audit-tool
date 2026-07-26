@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS findings (
     category_number INTEGER NOT NULL,
     category_name TEXT NOT NULL,
     check_id TEXT NOT NULL,
+    check_slug TEXT NOT NULL,
     title TEXT NOT NULL,
     severity TEXT NOT NULL,
     observation TEXT NOT NULL,
@@ -60,6 +61,7 @@ CREATE TABLE IF NOT EXISTS findings (
 
 CREATE INDEX IF NOT EXISTS idx_findings_run_id ON findings(run_id);
 CREATE INDEX IF NOT EXISTS idx_findings_check_id ON findings(check_id);
+CREATE INDEX IF NOT EXISTS idx_findings_check_slug ON findings(check_slug);
 CREATE INDEX IF NOT EXISTS idx_audit_runs_is_synthetic ON audit_runs(is_synthetic);
 """
 
@@ -142,15 +144,16 @@ class AuditDatabaseWriter:
         with closing(sqlite3.connect(self._db_path)) as conn:
             conn.executemany(
                 "INSERT INTO findings "
-                "(run_id, category_number, category_name, check_id, title, severity, "
+                "(run_id, category_number, category_name, check_id, check_slug, title, severity, "
                 "observation, evidence, business_impact, recommended_direction) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 [
                     (
                         run_id,
                         f.category_number,
                         f.category_name,
                         f.check_id,
+                        f.check_slug,
                         f.title,
                         f.severity.value,
                         f.observation,

@@ -13,21 +13,24 @@ from integri_audit_tool.registry import Check, CategoryModule
 from . import checks
 
 CATEGORY = CategoryModule(
-    number=3,
+    slug="indexing-strategy",
     name="Indexing Strategy",
     checks=[
         Check(
-            id="03.01",
+            slug="unused-indexes",
+            rubric_bullet=1,
             description="Do query patterns match the indexes that exist? Look for indexes that are never used.",
             fn=checks.check_unused_indexes,
         ),
         Check(
-            id="03.02",
+            slug="gin-usage",
+            rubric_bullet=2,
             description="Is GIN used appropriately for JSONB containment (@>) and full-text search?",
             fn=checks.check_gin_usage,
         ),
         Check(
-            id="03.04",
+            slug="redundant-indexes",
+            rubric_bullet=4,
             description="Are there redundant or overlapping indexes on the same table?",
             fn=checks.check_redundant_indexes,
         ),

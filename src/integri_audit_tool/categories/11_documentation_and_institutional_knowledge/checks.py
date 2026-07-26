@@ -21,9 +21,6 @@ from integri_audit_tool.models import Finding, Severity
 
 from . import queries
 
-_CATEGORY_NUMBER = 11
-_CATEGORY_NAME = "Documentation & Institutional Knowledge"
-
 
 def check_table_documentation_coverage(conn: psycopg.Connection, config: AuditConfig) -> list[Finding]:
     """Rubric 11.01 — is the schema documented anywhere outside the schema itself?"""
@@ -33,9 +30,7 @@ def check_table_documentation_coverage(conn: psycopg.Connection, config: AuditCo
 
     return [
         Finding(
-            category_number=_CATEGORY_NUMBER,
-            category_name=_CATEGORY_NAME,
-            check_id="11.01",
+            check_slug="table-documentation-coverage",
             title="No table-level documentation found in the schema",
             severity=Severity.LOW,
             observation=(
@@ -65,9 +60,7 @@ def check_undocumented_jsonb_column_rationale(
     for row in queries.fetch_undocumented_jsonb_columns(conn):
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="11.02",
+                check_slug="undocumented-jsonb-column-rationale",
                 title=f"Undocumented JSONB column: {row['table_name']}.{row['column_name']}",
                 severity=Severity.LOW,
                 observation=(
@@ -94,9 +87,7 @@ def check_jsonb_without_schema_registry(conn: psycopg.Connection, config: AuditC
 
     return [
         Finding(
-            category_number=_CATEGORY_NUMBER,
-            category_name=_CATEGORY_NAME,
-            check_id="11.03",
+            check_slug="jsonb-without-schema-registry",
             title="JSONB columns exist with no schema/registry table found",
             severity=Severity.LOW,
             observation=(

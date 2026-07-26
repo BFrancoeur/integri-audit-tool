@@ -15,9 +15,6 @@ from integri_audit_tool.models import Finding, Severity
 
 from . import queries
 
-_CATEGORY_NUMBER = 3
-_CATEGORY_NAME = "Indexing Strategy"
-
 
 def check_unused_indexes(conn: psycopg.Connection, config: AuditConfig) -> list[Finding]:
     """Rubric 03.01 — do query patterns match the indexes that exist?"""
@@ -25,9 +22,7 @@ def check_unused_indexes(conn: psycopg.Connection, config: AuditConfig) -> list[
     for row in queries.fetch_unused_indexes(conn):
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="03.01",
+                check_slug="unused-indexes",
                 title=f"Unused index: {row['index_name']} on {row['table_name']}",
                 severity=Severity.LOW,
                 observation=(
@@ -54,9 +49,7 @@ def check_gin_usage(conn: psycopg.Connection, config: AuditConfig) -> list[Findi
     for row in queries.fetch_jsonb_columns_without_gin(conn):
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="03.02",
+                check_slug="gin-usage",
                 title=f"JSONB column without a GIN index: {row['table_name']}.{row['column_name']}",
                 severity=Severity.MEDIUM,
                 observation=(
@@ -84,9 +77,7 @@ def check_redundant_indexes(conn: psycopg.Connection, config: AuditConfig) -> li
         index_list = ", ".join(row["index_names"])
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="03.04",
+                check_slug="redundant-indexes",
                 title=f"Possible overlapping indexes on {row['table_name']} ({row['leading_column']})",
                 severity=Severity.LOW,
                 observation=(

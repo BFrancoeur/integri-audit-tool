@@ -16,9 +16,6 @@ from integri_audit_tool.models import Finding, Severity
 
 from . import queries
 
-_CATEGORY_NUMBER = 6
-_CATEGORY_NAME = "Data Quality & Integrity"
-
 _HIGH_NULL_FRACTION_THRESHOLD = 0.5
 _NEAR_UNIQUE_RATIO_THRESHOLD = 0.98
 
@@ -36,9 +33,7 @@ def check_high_null_fraction_columns(conn: psycopg.Connection, config: AuditConf
             continue
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="06.01",
+                check_slug="high-null-fraction-columns",
                 title=f"High null rate: {row['table_name']}.{row['column_name']} ({row['null_frac']:.0%} null)",
                 severity=Severity.INFORMATIONAL,
                 observation=(
@@ -66,9 +61,7 @@ def check_unvalidated_foreign_keys(conn: psycopg.Connection, config: AuditConfig
     for row in queries.fetch_unvalidated_foreign_keys(conn):
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="06.03",
+                check_slug="unvalidated-foreign-keys",
                 title=f"Unvalidated foreign key: {row['conname']} on {row['table_name']}",
                 severity=Severity.MEDIUM,
                 observation=(
@@ -98,9 +91,7 @@ def check_near_unique_columns_without_constraint(
             continue
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="06.04",
+                check_slug="near-unique-columns-without-constraint",
                 title=f"Near-unique column without a unique constraint: {row['table_name']}.{row['column_name']}",
                 severity=Severity.MEDIUM,
                 observation=(
@@ -131,9 +122,7 @@ def check_never_null_nullable_columns(conn: psycopg.Connection, config: AuditCon
             continue
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="06.05",
+                check_slug="never-null-nullable-columns",
                 title=f"Nullable column never actually null: {row['table_name']}.{row['column_name']}",
                 severity=Severity.LOW,
                 observation=(
@@ -160,9 +149,7 @@ def check_audit_timestamp_columns_have_nulls(
     for row in queries.fetch_audit_timestamp_column_null_fractions(conn):
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="06.06",
+                check_slug="audit-timestamp-columns-have-nulls",
                 title=f"Audit timestamp column has nulls: {row['table_name']}.{row['column_name']}",
                 severity=Severity.MEDIUM,
                 observation=(

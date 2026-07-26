@@ -1,45 +1,103 @@
 from integri_audit_tool import registry
+from integri_audit_tool.registry import Check, CategoryModule
+
+
+def _category(slug: str, checks: list[Check] | None = None) -> CategoryModule:
+    return CategoryModule(slug=slug, name=slug, checks=checks or [])
+
+
+def test_stamp_category_numbers_assigns_position_in_order():
+    a = _category("a")
+    b = _category("b")
+    c = _category("c")
+
+    numbered = registry._stamp_category_numbers([c, a, b], order=["a", "b", "c"])
+
+    assert [cat.slug for cat in numbered] == ["a", "b", "c"]
+    assert [cat.number for cat in numbered] == [1, 2, 3]
+
+
+def test_stamp_category_numbers_reflects_reordered_list():
+    """The whole point of the decoupling: changing `order` alone changes the
+    displayed numbers, with no other code touched."""
+    a = _category("a")
+    b = _category("b")
+
+    numbered = registry._stamp_category_numbers([a, b], order=["b", "a"])
+
+    assert {cat.slug: cat.number for cat in numbered} == {"a": 2, "b": 1}
+
+
+def test_stamp_category_numbers_raises_when_discovered_category_missing_from_order():
+    stray = _category("stray")
+
+    try:
+        registry._stamp_category_numbers([stray], order=["a"])
+        assert False, "expected ValueError"
+    except ValueError as exc:
+        assert "stray" in str(exc)
+
+
+def test_stamp_category_numbers_raises_when_order_lists_a_category_never_discovered():
+    a = _category("a")
+
+    try:
+        registry._stamp_category_numbers([a], order=["a", "ghost"])
+        assert False, "expected ValueError"
+    except ValueError as exc:
+        assert "ghost" in str(exc)
 
 
 def test_discover_categories_returns_all_11_sorted_by_number():
-    categories = registry.discover_categories()
-    numbers = [c.number for c in categories]
+    found = registry.discover_categories()
+    numbers = [c.number for c in found]
     assert numbers == list(range(1, 12))
 
 
 def test_indexing_strategy_category_has_expected_checks():
-    categories = {c.number: c for c in registry.discover_categories()}
-    indexing = categories[3]
+    categories = {c.slug: c for c in registry.discover_categories()}
+    indexing = categories["indexing-strategy"]
     assert indexing.name == "Indexing Strategy"
-    check_ids = {c.id for c in indexing.checks}
-    assert check_ids == {"03.01", "03.02", "03.04"}
+    check_slugs = {c.slug for c in indexing.checks}
+    assert check_slugs == {"unused-indexes", "gin-usage", "redundant-indexes"}
 
 
 def test_jsonb_governance_category_has_expected_checks_and_applicability():
-    categories = {c.number: c for c in registry.discover_categories()}
-    jsonb_governance = categories[2]
+    categories = {c.slug: c for c in registry.discover_categories()}
+    jsonb_governance = categories["jsonb-structure-and-governance"]
     assert jsonb_governance.name == "JSONB Structure & Governance"
-    check_ids = {c.id for c in jsonb_governance.checks}
-    assert check_ids == {"02.02", "02.03", "02.04"}
+    check_slugs = {c.slug for c in jsonb_governance.checks}
+    assert check_slugs == {"key-naming-drift", "key-type-inconsistency", "missing-validation-layer"}
     assert jsonb_governance.applicability is not None
 
 
 def test_fulltext_search_category_has_expected_checks_and_applicability():
-    categories = {c.number: c for c in registry.discover_categories()}
-    fulltext_search = categories[4]
+    categories = {c.slug: c for c in registry.discover_categories()}
+    fulltext_search = categories["full-text-and-structured-search-behavior"]
     assert fulltext_search.name == "Full-Text & Structured Search Behavior"
-    check_ids = {c.id for c in fulltext_search.checks}
-    assert check_ids == {"04.01", "04.02", "04.03", "04.04", "04.05"}
+    check_slugs = {c.slug for c in fulltext_search.checks}
+    assert check_slugs == {
+        "missing-fulltext-index",
+        "tsvector-sync-mechanism",
+        "combined-structured-and-freetext-queries",
+        "relevance-ranking",
+        "safe-tsquery-parsing",
+    }
     assert fulltext_search.applicability is not None
     assert any("04.06" in note for note in fulltext_search.out_of_scope)
 
 
 def test_query_patterns_category_has_expected_checks_and_out_of_scope():
-    categories = {c.number: c for c in registry.discover_categories()}
-    query_patterns = categories[5]
+    categories = {c.slug: c for c in registry.discover_categories()}
+    query_patterns = categories["query-patterns-and-application-interaction"]
     assert query_patterns.name == "Query Patterns & Application Interaction"
-    check_ids = {c.id for c in query_patterns.checks}
-    assert check_ids == {"05.01", "05.03", "05.04", "05.06"}
+    check_slugs = {c.slug for c in query_patterns.checks}
+    assert check_slugs == {
+        "n-plus-one-candidates",
+        "offset-pagination",
+        "idle-in-transaction-sessions",
+        "slow-query-monitoring",
+    }
     assert query_patterns.applicability is None
     out_of_scope_text = " ".join(query_patterns.out_of_scope)
     assert "05.02" in out_of_scope_text
@@ -47,59 +105,90 @@ def test_query_patterns_category_has_expected_checks_and_out_of_scope():
 
 
 def test_data_quality_category_has_expected_checks():
-    categories = {c.number: c for c in registry.discover_categories()}
-    data_quality = categories[6]
+    categories = {c.slug: c for c in registry.discover_categories()}
+    data_quality = categories["data-quality-and-integrity"]
     assert data_quality.name == "Data Quality & Integrity"
-    check_ids = {c.id for c in data_quality.checks}
-    assert check_ids == {"06.01", "06.03", "06.04", "06.05", "06.06"}
+    check_slugs = {c.slug for c in data_quality.checks}
+    assert check_slugs == {
+        "high-null-fraction-columns",
+        "unvalidated-foreign-keys",
+        "near-unique-columns-without-constraint",
+        "never-null-nullable-columns",
+        "audit-timestamp-columns-have-nulls",
+    }
     assert data_quality.applicability is None
 
 
 def test_scale_readiness_category_has_all_5_checks():
-    categories = {c.number: c for c in registry.discover_categories()}
-    scale_readiness = categories[7]
+    categories = {c.slug: c for c in registry.discover_categories()}
+    scale_readiness = categories["scale-and-growth-readiness"]
     assert scale_readiness.name == "Scale & Growth Readiness"
-    check_ids = {c.id for c in scale_readiness.checks}
-    assert check_ids == {"07.01", "07.02", "07.03", "07.04", "07.05"}
+    check_slugs = {c.slug for c in scale_readiness.checks}
+    assert check_slugs == {
+        "slow-queries",
+        "largest-tables",
+        "tenant-columns-without-rls",
+        "high-bloat-tables-without-tuning",
+        "large-jsonb-on-hot-tables",
+    }
     assert scale_readiness.applicability is None
     assert scale_readiness.out_of_scope == []
 
 
 def test_security_boundaries_category_has_expected_checks_and_out_of_scope():
-    categories = {c.number: c for c in registry.discover_categories()}
-    security = categories[8]
+    categories = {c.slug: c for c in registry.discover_categories()}
+    security = categories["security-and-access-boundaries"]
     assert security.name == "Security & Access Boundaries"
-    check_ids = {c.id for c in security.checks}
-    assert check_ids == {"08.01", "08.02", "08.04", "08.05", "08.06"}
+    check_slugs = {c.slug for c in security.checks}
+    assert check_slugs == {
+        "login-superuser-roles",
+        "rls-enabled-without-policies",
+        "undocumented-pii-and-ssl",
+        "audit-trail-availability",
+        "superuser-roles-without-expiration",
+    }
     assert security.applicability is None
     assert any("08.03" in note for note in security.out_of_scope)
 
 
 def test_backup_recovery_category_has_all_4_checks():
-    categories = {c.number: c for c in registry.discover_categories()}
-    backup_recovery = categories[9]
+    categories = {c.slug: c for c in registry.discover_categories()}
+    backup_recovery = categories["backup-recovery-and-change-management"]
     assert backup_recovery.name == "Backup, Recovery & Change Management"
-    check_ids = {c.id for c in backup_recovery.checks}
-    assert check_ids == {"09.01", "09.02", "09.03", "09.04"}
+    check_slugs = {c.slug for c in backup_recovery.checks}
+    assert check_slugs == {
+        "wal-archiving-failures",
+        "wal-archiving-status-summary",
+        "migration-tracking-table-absent",
+        "replica-topology-absent",
+    }
     assert backup_recovery.applicability is None
     assert backup_recovery.out_of_scope == []
 
 
 def test_monitoring_category_has_expected_checks_and_out_of_scope():
-    categories = {c.number: c for c in registry.discover_categories()}
-    monitoring = categories[10]
+    categories = {c.slug: c for c in registry.discover_categories()}
+    monitoring = categories["monitoring-and-observability"]
     assert monitoring.name == "Monitoring & Observability"
-    check_ids = {c.id for c in monitoring.checks}
-    assert check_ids == {"10.01", "10.02", "10.03"}
+    check_slugs = {c.slug for c in monitoring.checks}
+    assert check_slugs == {
+        "pg-stat-statements-installed",
+        "connection-saturation",
+        "bloated-tables-without-recent-vacuum",
+    }
     assert monitoring.applicability is None
     assert any("10.04" in note for note in monitoring.out_of_scope)
 
 
 def test_documentation_category_has_expected_checks_and_out_of_scope():
-    categories = {c.number: c for c in registry.discover_categories()}
-    documentation = categories[11]
+    categories = {c.slug: c for c in registry.discover_categories()}
+    documentation = categories["documentation-and-institutional-knowledge"]
     assert documentation.name == "Documentation & Institutional Knowledge"
-    check_ids = {c.id for c in documentation.checks}
-    assert check_ids == {"11.01", "11.02", "11.03"}
+    check_slugs = {c.slug for c in documentation.checks}
+    assert check_slugs == {
+        "table-documentation-coverage",
+        "undocumented-jsonb-column-rationale",
+        "jsonb-without-schema-registry",
+    }
     assert documentation.applicability is None
     assert any("11.04" in note for note in documentation.out_of_scope)

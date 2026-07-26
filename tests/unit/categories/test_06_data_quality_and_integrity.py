@@ -31,7 +31,7 @@ def test_check_high_null_fraction_columns_flags_above_threshold(mocker):
     findings = checks.check_high_null_fraction_columns(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "06.01"
+    assert findings[0].check_slug == "high-null-fraction-columns"
     assert findings[0].severity == Severity.INFORMATIONAL
     assert "75%" in findings[0].title
 
@@ -62,7 +62,7 @@ def test_check_unvalidated_foreign_keys_flags_row(mocker):
     findings = checks.check_unvalidated_foreign_keys(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "06.03"
+    assert findings[0].check_slug == "unvalidated-foreign-keys"
     assert findings[0].severity == Severity.MEDIUM
     assert "orders_customer_id_fkey" in findings[0].title
 
@@ -90,7 +90,7 @@ def test_check_near_unique_columns_flags_high_ratio_via_negative_n_distinct(mock
     findings = checks.check_near_unique_columns_without_constraint(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "06.04"
+    assert findings[0].check_slug == "near-unique-columns-without-constraint"
     assert findings[0].severity == Severity.MEDIUM
     assert "100%" in findings[0].observation
 
@@ -113,7 +113,7 @@ def test_check_near_unique_columns_flags_high_ratio_via_positive_n_distinct(mock
     findings = checks.check_near_unique_columns_without_constraint(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "06.04"
+    assert findings[0].check_slug == "near-unique-columns-without-constraint"
 
 
 def test_check_near_unique_columns_ignores_low_ratio(mocker):
@@ -143,7 +143,7 @@ def test_check_never_null_nullable_columns_flags_zero_null_frac(mocker):
     findings = checks.check_never_null_nullable_columns(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "06.05"
+    assert findings[0].check_slug == "never-null-nullable-columns"
     assert findings[0].severity == Severity.LOW
 
 
@@ -166,7 +166,7 @@ def test_check_audit_timestamp_columns_have_nulls_builds_finding(mocker):
     findings = checks.check_audit_timestamp_columns_have_nulls(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "06.06"
+    assert findings[0].check_slug == "audit-timestamp-columns-have-nulls"
     assert findings[0].severity == Severity.MEDIUM
     assert "updated_at" in findings[0].title
 

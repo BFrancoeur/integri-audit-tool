@@ -11,6 +11,7 @@ from integri_audit_tool.models import Finding, Severity
 def make_finding():
     def _make(**overrides) -> Finding:
         defaults = dict(
+            check_slug="test-finding",
             category_number=1,
             category_name="Test Category",
             check_id="01.01",

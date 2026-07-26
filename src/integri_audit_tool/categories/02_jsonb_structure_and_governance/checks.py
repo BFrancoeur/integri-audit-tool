@@ -16,9 +16,6 @@ from integri_audit_tool.models import Finding, Severity
 
 from . import queries
 
-_CATEGORY_NUMBER = 2
-_CATEGORY_NAME = "JSONB Structure & Governance"
-
 
 def is_applicable(conn: psycopg.Connection) -> bool:
     """Category is N/A when the schema has no JSONB columns at all (per rubric guidance)."""
@@ -35,9 +32,7 @@ def check_key_naming_drift(conn: psycopg.Connection, config: AuditConfig) -> lis
         for variant in variants:
             findings.append(
                 Finding(
-                    category_number=_CATEGORY_NUMBER,
-                    category_name=_CATEGORY_NAME,
-                    check_id="02.02",
+                    check_slug="key-naming-drift",
                     title=(
                         f"Inconsistent JSONB key naming in {col['table_name']}.{col['column_name']}: "
                         f"{variant['normalized_key']}"
@@ -75,9 +70,7 @@ def check_key_type_inconsistency(conn: psycopg.Connection, config: AuditConfig) 
         for row in inconsistencies:
             findings.append(
                 Finding(
-                    category_number=_CATEGORY_NUMBER,
-                    category_name=_CATEGORY_NAME,
-                    check_id="02.03",
+                    check_slug="key-type-inconsistency",
                     title=(
                         f"Type inconsistency for JSONB key '{row['key_name']}' in "
                         f"{col['table_name']}.{col['column_name']}"
@@ -111,9 +104,7 @@ def check_missing_validation_layer(conn: psycopg.Connection, config: AuditConfig
     for row in queries.fetch_jsonb_columns_without_validation(conn):
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="02.04",
+                check_slug="missing-validation-layer",
                 title=f"No validation layer detected for {row['table_name']}.{row['column_name']}",
                 severity=Severity.LOW,
                 observation=(

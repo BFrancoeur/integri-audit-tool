@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import datetime, timezone
 
 import psycopg
@@ -10,6 +11,19 @@ from integri_audit_tool import registry
 from integri_audit_tool.config import AuditConfig
 from integri_audit_tool.models import CATEGORY_12_OUT_OF_SCOPE_NOTE, AuditReport, CategoryResult, Finding, Severity
 from integri_audit_tool.reporter import AuditReporter, NullReporter
+
+_CHECK_ID_FORMAT = "{category_number:02d}.{rubric_bullet:02d}"
+"""Format for a check's displayed "NN.NN" id: its category's current display
+number (computed at run time from _CATEGORY_ORDER) and the check's authored
+rubric_bullet (its bullet number within the category's rubric checklist)."""
+
+
+def _display_check_id(category_number: int, rubric_bullet: int) -> str:
+    return _CHECK_ID_FORMAT.format(category_number=category_number, rubric_bullet=rubric_bullet)
+
+
+def _matches_check_filter(check: "registry.Check", check_id: str, check_filter: set[str] | None) -> bool:
+    return check_filter is None or check.slug in check_filter or check_id in check_filter
 
 
 def run_audit(
@@ -39,7 +53,9 @@ def run_audit(
         checks_to_run = [
             check
             for check in category.checks
-            if config.check_filter is None or check.id in config.check_filter
+            if _matches_check_filter(
+                check, _display_check_id(category.number, check.rubric_bullet), config.check_filter
+            )
         ]
 
         # When a --check filter is active and this category contributes
@@ -70,19 +86,29 @@ def run_audit(
 
         findings: list[Finding] = []
         for check in checks_to_run:
+            check_id = _display_check_id(category.number, check.rubric_bullet)
             reporter.check_started(category, check)
             try:
-                check_findings = check.fn(conn, config)
+                check_findings = [
+                    dataclasses.replace(
+                        finding,
+                        category_number=category.number,
+                        category_name=category.name,
+                        check_id=check_id,
+                    )
+                    for finding in check.fn(conn, config)
+                ]
                 findings.extend(check_findings)
                 reporter.check_succeeded(category, check, check_findings)
             except Exception as exc:  # noqa: BLE001 - one bad check must not abort the run
                 reporter.check_failed(category, check, exc)
                 findings.append(
                     Finding(
+                        check_slug=check.slug,
                         category_number=category.number,
                         category_name=category.name,
-                        check_id=check.id,
-                        title=f"Check {check.id} could not be run",
+                        check_id=check_id,
+                        title=f"Check {check_id} could not be run",
                         severity=Severity.INFORMATIONAL,
                         observation=f"{check.description}\n\nThe check raised an error and was skipped: {exc}",
                     )

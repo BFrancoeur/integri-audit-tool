@@ -16,9 +16,6 @@ from integri_audit_tool.models import Finding, Severity
 
 from . import queries
 
-_CATEGORY_NUMBER = 1
-_CATEGORY_NAME = "Schema Design & Normalization Boundaries"
-
 _INTEGER_FAMILY = {"integer", "bigint", "smallint"}
 
 
@@ -28,9 +25,7 @@ def check_missing_foreign_keys(conn: psycopg.Connection, config: AuditConfig) ->
     for row in queries.fetch_fk_like_columns_without_fk(conn):
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="01.04",
+                check_slug="missing-foreign-keys",
                 title=f"FK-shaped column without a declared constraint: {row['table_name']}.{row['column_name']}",
                 severity=Severity.MEDIUM,
                 observation=(
@@ -61,9 +56,7 @@ def check_schema_drift(conn: psycopg.Connection, config: AuditConfig) -> list[Fi
         kind = "naming and type" if type_drift else "naming"
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="01.05",
+                check_slug="schema-drift",
                 title=f"Schema drift ({kind}) for column concept '{row['normalized_name']}'",
                 severity=severity,
                 observation=(
@@ -92,9 +85,7 @@ def check_primary_key_consistency(conn: psycopg.Connection, config: AuditConfig)
     for row in queries.fetch_tables_without_primary_key(conn):
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="01.06",
+                check_slug="primary-key-consistency",
                 title=f"Table without a primary key: {row['table_name']}",
                 severity=Severity.HIGH,
                 observation=f"{row['schema_name']}.{row['table_name']} has no PRIMARY KEY constraint.",
@@ -118,9 +109,7 @@ def check_primary_key_consistency(conn: psycopg.Connection, config: AuditConfig)
         summary = "; ".join(f"{family}: {', '.join(tables)}" for family, tables in sorted(by_family.items()))
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="01.06",
+                check_slug="primary-key-consistency",
                 title="Mixed primary key type families across the schema",
                 severity=Severity.INFORMATIONAL,
                 observation=f"Primary keys use more than one type family: {summary}.",

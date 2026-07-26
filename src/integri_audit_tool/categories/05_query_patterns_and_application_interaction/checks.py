@@ -22,17 +22,12 @@ from integri_audit_tool.models import Finding, Severity
 
 from . import queries
 
-_CATEGORY_NUMBER = 5
-_CATEGORY_NAME = "Query Patterns & Application Interaction"
-
 _LONG_IDLE_IN_TRANSACTION_THRESHOLD = timedelta(minutes=5)
 
 
-def _pg_stat_statements_unavailable_finding(check_id: str, bullet_summary: str) -> Finding:
+def _pg_stat_statements_unavailable_finding(check_slug: str, bullet_summary: str) -> Finding:
     return Finding(
-        category_number=_CATEGORY_NUMBER,
-        category_name=_CATEGORY_NAME,
-        check_id=check_id,
+        check_slug=check_slug,
         title=f"Could not assess ({bullet_summary}): pg_stat_statements is not installed",
         severity=Severity.INFORMATIONAL,
         observation=(
@@ -51,15 +46,13 @@ def _pg_stat_statements_unavailable_finding(check_id: str, bullet_summary: str) 
 def check_n_plus_one_candidates(conn: psycopg.Connection, config: AuditConfig) -> list[Finding]:
     """Rubric 05.01 — evidence of N+1 query patterns?"""
     if not queries.is_pg_stat_statements_available(conn):
-        return [_pg_stat_statements_unavailable_finding("05.01", "N+1 query patterns")]
+        return [_pg_stat_statements_unavailable_finding("n-plus-one-candidates", "N+1 query patterns")]
 
     findings = []
     for row in queries.fetch_n_plus_one_candidates(conn):
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="05.01",
+                check_slug="n-plus-one-candidates",
                 title=f"Possible N+1 candidate: called {row['calls']} times, ~1 row each",
                 severity=Severity.INFORMATIONAL,
                 observation=(
@@ -87,7 +80,7 @@ def check_n_plus_one_candidates(conn: psycopg.Connection, config: AuditConfig) -
 def check_offset_pagination(conn: psycopg.Connection, config: AuditConfig) -> list[Finding]:
     """Rubric 05.03 — is pagination keyset/cursor-based, or OFFSET at scale?"""
     if not queries.is_pg_stat_statements_available(conn):
-        return [_pg_stat_statements_unavailable_finding("05.03", "pagination strategy")]
+        return [_pg_stat_statements_unavailable_finding("offset-pagination", "pagination strategy")]
 
     stats = queries.fetch_offset_pagination_usage(conn)
     if stats["matched_statement_count"] == 0:
@@ -96,9 +89,7 @@ def check_offset_pagination(conn: psycopg.Connection, config: AuditConfig) -> li
     examples = "; ".join(stats["example_queries"] or [])
     return [
         Finding(
-            category_number=_CATEGORY_NUMBER,
-            category_name=_CATEGORY_NAME,
-            check_id="05.03",
+            check_slug="offset-pagination",
             title="OFFSET-based pagination in use",
             severity=Severity.LOW,
             observation=(
@@ -128,9 +119,7 @@ def check_idle_in_transaction_sessions(conn: psycopg.Connection, config: AuditCo
         )
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="05.04",
+                check_slug="idle-in-transaction-sessions",
                 title=f"Idle-in-transaction session (pid {row['pid']}, open {duration})",
                 severity=severity,
                 observation=(
@@ -167,9 +156,7 @@ def check_slow_query_monitoring(conn: psycopg.Connection, config: AuditConfig) -
 
     return [
         Finding(
-            category_number=_CATEGORY_NUMBER,
-            category_name=_CATEGORY_NAME,
-            check_id="05.06",
+            check_slug="slow-query-monitoring",
             title="No slow-query monitoring mechanism detected",
             severity=Severity.MEDIUM,
             observation=(

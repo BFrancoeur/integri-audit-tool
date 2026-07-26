@@ -35,21 +35,23 @@ _SEVERITY_STYLES = {
 }
 
 # Mirrors scripts/aliases.sh — kept here rather than derived from it since
-# that's a shell file, not something Python can introspect. Falls back to
-# "Category N" for any category number not listed (future categories added
-# to the rubric before an alias exists for them).
+# that's a shell file, not something Python can introspect. Keyed by the
+# category's stable slug (not its displayed number), so an alias keeps
+# pointing at the right category even if _CATEGORY_ORDER reorders it later.
+# Falls back to "Category N" for any category slug not listed (future
+# categories added to the rubric before an alias exists for them).
 _CATEGORY_ALIASES = {
-    1: "ia-schema",
-    2: "ia-jsonb",
-    3: "ia-index",
-    4: "ia-fts",
-    5: "ia-query",
-    6: "ia-quality",
-    7: "ia-scale",
-    8: "ia-sec",
-    9: "ia-backup",
-    10: "ia-mon",
-    11: "ia-docs",
+    "schema-design-and-normalization-boundaries": "ia-schema",
+    "jsonb-structure-and-governance": "ia-jsonb",
+    "indexing-strategy": "ia-index",
+    "full-text-and-structured-search-behavior": "ia-fts",
+    "query-patterns-and-application-interaction": "ia-query",
+    "data-quality-and-integrity": "ia-quality",
+    "scale-and-growth-readiness": "ia-scale",
+    "security-and-access-boundaries": "ia-sec",
+    "backup-recovery-and-change-management": "ia-backup",
+    "monitoring-and-observability": "ia-mon",
+    "documentation-and-institutional-knowledge": "ia-docs",
 }
 
 
@@ -109,7 +111,7 @@ class CliProgressReporter:
         self._console.print(f"[yellow]Category {category.number} not applicable:[/yellow] {reason}")
 
     def check_started(self, category: "CategoryModule", check: "Check") -> None:
-        self._console.print(f"Test {check.id} — {check.description}")
+        self._console.print(f"Test {check.slug} — {check.description}")
 
     def check_succeeded(
         self, category: "CategoryModule", check: "Check", findings: list["Finding"]
@@ -121,10 +123,10 @@ class CliProgressReporter:
         # checkmark/X only conveys whether anything was found at all.
         if findings:
             self._console.print(
-                f"[bold red]✗ {check.id} completed[/bold red] ({len(findings)} finding(s))"
+                f"[bold red]✗ {check.slug} completed[/bold red] ({len(findings)} finding(s))"
             )
         else:
-            self._console.print(f"[green]✓ {check.id} passed[/green]")
+            self._console.print(f"[green]✓ {check.slug} passed[/green]")
         for finding in findings:
             style = _SEVERITY_STYLES.get(finding.severity, "")
             self._console.print(
@@ -132,9 +134,9 @@ class CliProgressReporter:
             )
 
     def check_failed(self, category: "CategoryModule", check: "Check", error: Exception) -> None:
-        self._console.print(f"[bold red]✗ {check.id} failed[/bold red]: {error}")
+        self._console.print(f"[bold red]✗ {check.slug} failed[/bold red]: {error}")
         logger = self._ensure_logger()
-        logger.error("Check %s (%s) failed: %s", check.id, category.name, error, exc_info=error)
+        logger.error("Check %s (%s) failed: %s", check.slug, category.name, error, exc_info=error)
 
     def category_completed(self, category: "CategoryModule", result: "CategoryResult") -> None:
         # Only announce categories this reporter actually announced in the
@@ -143,7 +145,7 @@ class CliProgressReporter:
         # already printed its own message via category_not_applicable).
         if category.number not in self._announced_categories or result.status != "completed":
             return
-        alias = _CATEGORY_ALIASES.get(category.number, f"Category {category.number}")
+        alias = _CATEGORY_ALIASES.get(category.slug, f"Category {category.number}")
         self._console.print(f"[bold]{alias} completed[/bold]")
 
     def audit_completed(self, report: "AuditReport") -> None:

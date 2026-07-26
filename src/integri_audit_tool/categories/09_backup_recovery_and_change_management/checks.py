@@ -20,9 +20,6 @@ from integri_audit_tool.models import Finding, Severity
 
 from . import queries
 
-_CATEGORY_NUMBER = 9
-_CATEGORY_NAME = "Backup, Recovery & Change Management"
-
 
 def check_wal_archiving_failures(conn: psycopg.Connection, config: AuditConfig) -> list[Finding]:
     """Rubric 09.01 — are backups automated and tested, not just assumed to exist?"""
@@ -37,9 +34,7 @@ def check_wal_archiving_failures(conn: psycopg.Connection, config: AuditConfig) 
 
     return [
         Finding(
-            category_number=_CATEGORY_NUMBER,
-            category_name=_CATEGORY_NAME,
-            check_id="09.01",
+            check_slug="wal-archiving-failures",
             title=(
                 f"WAL archiving has {'active' if actively_failing else 'historical'} failures "
                 f"({status['failed_count']} total)"
@@ -81,9 +76,7 @@ def check_wal_archiving_status_summary(conn: psycopg.Connection, config: AuditCo
 
     return [
         Finding(
-            category_number=_CATEGORY_NUMBER,
-            category_name=_CATEGORY_NAME,
-            check_id="09.02",
+            check_slug="wal-archiving-status-summary",
             title="WAL archiving status (for RPO comparison)",
             severity=Severity.INFORMATIONAL,
             observation=observation,
@@ -108,9 +101,7 @@ def check_migration_tracking_table_absent(conn: psycopg.Connection, config: Audi
 
     return [
         Finding(
-            category_number=_CATEGORY_NUMBER,
-            category_name=_CATEGORY_NAME,
-            check_id="09.03",
+            check_slug="migration-tracking-table-absent",
             title="No recognized migration-tracking table found",
             severity=Severity.LOW,
             observation=(
@@ -139,9 +130,7 @@ def check_replica_topology_absent(conn: psycopg.Connection, config: AuditConfig)
 
     return [
         Finding(
-            category_number=_CATEGORY_NUMBER,
-            category_name=_CATEGORY_NAME,
-            check_id="09.04",
+            check_slug="replica-topology-absent",
             title="No streaming replicas currently connected",
             severity=Severity.LOW,
             observation="pg_stat_replication shows no replicas currently streaming from this instance.",

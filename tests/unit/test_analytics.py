@@ -7,8 +7,9 @@ from integri_audit_tool.models import CategoryResult, Finding, Severity
 from integri_audit_tool.registry import CategoryModule
 
 
-def _finding(check_id="01.01", severity=Severity.MEDIUM, title="Something found"):
+def _finding(check_id="01.01", check_slug="missing-foreign-keys", severity=Severity.MEDIUM, title="Something found"):
     return Finding(
+        check_slug=check_slug,
         category_number=1,
         category_name="Schema Design & Normalization Boundaries",
         check_id=check_id,
@@ -39,7 +40,12 @@ def test_category_completed_creates_run_and_finding_rows(tmp_path):
     writer = AuditDatabaseWriter(
         target_label="127.0.0.1:5432/sample_company", client_name="Sample Company", db_path=db_path
     )
-    category = CategoryModule(number=1, name="Schema Design & Normalization Boundaries", checks=[])
+    category = CategoryModule(
+        slug="schema-design-and-normalization-boundaries",
+        number=1,
+        name="Schema Design & Normalization Boundaries",
+        checks=[],
+    )
     finding = _finding()
 
     writer.category_completed(
@@ -62,7 +68,7 @@ def test_category_completed_creates_run_and_finding_rows(tmp_path):
 def test_category_completed_with_no_findings_does_not_create_a_run_row_yet(tmp_path):
     db_path = tmp_path / "analytics.db"
     writer = AuditDatabaseWriter(target_label="127.0.0.1:5432/sample_company", db_path=db_path)
-    category = CategoryModule(number=1, name="A", checks=[])
+    category = CategoryModule(slug="a", number=1, name="A", checks=[])
 
     writer.category_completed(
         category, CategoryResult(category_number=1, category_name="A", status="completed", findings=[])
@@ -91,12 +97,22 @@ def test_multiple_categories_accumulate_into_the_same_run(tmp_path):
     writer = AuditDatabaseWriter(target_label="127.0.0.1:5432/sample_company", db_path=db_path)
 
     writer.category_completed(
-        CategoryModule(number=1, name="A", checks=[]),
-        CategoryResult(category_number=1, category_name="A", status="completed", findings=[_finding(check_id="01.01")]),
+        CategoryModule(slug="a", number=1, name="A", checks=[]),
+        CategoryResult(
+            category_number=1,
+            category_name="A",
+            status="completed",
+            findings=[_finding(check_id="01.01", check_slug="a-check")],
+        ),
     )
     writer.category_completed(
-        CategoryModule(number=2, name="B", checks=[]),
-        CategoryResult(category_number=2, category_name="B", status="completed", findings=[_finding(check_id="02.01")]),
+        CategoryModule(slug="b", number=2, name="B", checks=[]),
+        CategoryResult(
+            category_number=2,
+            category_name="B",
+            status="completed",
+            findings=[_finding(check_id="02.01", check_slug="b-check")],
+        ),
     )
 
     runs = _query_all(db_path, "SELECT * FROM audit_runs")

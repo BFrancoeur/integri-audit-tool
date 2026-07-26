@@ -19,9 +19,6 @@ from integri_audit_tool.models import Finding, Severity
 
 from . import queries
 
-_CATEGORY_NUMBER = 8
-_CATEGORY_NAME = "Security & Access Boundaries"
-
 
 def check_login_superuser_roles(conn: psycopg.Connection, config: AuditConfig) -> list[Finding]:
     """Rubric 08.01 — are database roles scoped by least privilege?"""
@@ -29,9 +26,7 @@ def check_login_superuser_roles(conn: psycopg.Connection, config: AuditConfig) -
     for row in queries.fetch_login_superuser_roles(conn):
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="08.01",
+                check_slug="login-superuser-roles",
                 title=f"Login role with superuser: {row['rolname']}",
                 severity=Severity.MEDIUM,
                 observation=(
@@ -59,9 +54,7 @@ def check_rls_enabled_without_policies(conn: psycopg.Connection, config: AuditCo
     for row in queries.fetch_rls_enabled_without_policies(conn):
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="08.02",
+                check_slug="rls-enabled-without-policies",
                 title=f"Row-level security enabled with no policies: {row['table_name']}",
                 severity=Severity.MEDIUM,
                 observation=(
@@ -88,9 +81,7 @@ def check_undocumented_pii_and_ssl(conn: psycopg.Connection, config: AuditConfig
     for row in queries.fetch_undocumented_pii_columns(conn):
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="08.04",
+                check_slug="undocumented-pii-and-ssl",
                 title=f"Undocumented likely-PII column: {row['table_name']}.{row['column_name']}",
                 severity=Severity.LOW,
                 observation=(
@@ -111,9 +102,7 @@ def check_undocumented_pii_and_ssl(conn: psycopg.Connection, config: AuditConfig
     if ssl_setting != "on":
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="08.04",
+                check_slug="undocumented-pii-and-ssl",
                 title="Server-side SSL is not enabled",
                 severity=Severity.MEDIUM,
                 observation=f"The server's `ssl` setting is '{ssl_setting}', not 'on'.",
@@ -138,9 +127,7 @@ def check_audit_trail_availability(conn: psycopg.Connection, config: AuditConfig
 
     return [
         Finding(
-            category_number=_CATEGORY_NUMBER,
-            category_name=_CATEGORY_NAME,
-            check_id="08.05",
+            check_slug="audit-trail-availability",
             title="No audit trail mechanism detected",
             severity=Severity.MEDIUM,
             observation=(
@@ -164,9 +151,7 @@ def check_superuser_roles_without_expiration(conn: psycopg.Connection, config: A
     for row in queries.fetch_superuser_roles_without_expiration(conn):
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="08.06",
+                check_slug="superuser-roles-without-expiration",
                 title=f"Superuser role with no expiration: {row['rolname']}",
                 severity=Severity.MEDIUM,
                 observation=f"Role '{row['rolname']}' has SUPERUSER and no VALID UNTIL expiration set.",

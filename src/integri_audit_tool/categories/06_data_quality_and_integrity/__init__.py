@@ -27,31 +27,36 @@ from integri_audit_tool.registry import Check, CategoryModule
 from . import checks
 
 CATEGORY = CategoryModule(
-    number=6,
+    slug="data-quality-and-integrity",
     name="Data Quality & Integrity",
     checks=[
         Check(
-            id="06.01",
+            slug="high-null-fraction-columns",
+            rubric_bullet=1,
             description="What percentage of rows have null values in fields expected to be populated?",
             fn=checks.check_high_null_fraction_columns,
         ),
         Check(
-            id="06.03",
+            slug="unvalidated-foreign-keys",
+            rubric_bullet=3,
             description="Are there orphaned foreign key references or missing referential integrity?",
             fn=checks.check_unvalidated_foreign_keys,
         ),
         Check(
-            id="06.04",
+            slug="near-unique-columns-without-constraint",
+            rubric_bullet=4,
             description="Are there duplicate records that should be unique (missing unique constraints)?",
             fn=checks.check_near_unique_columns_without_constraint,
         ),
         Check(
-            id="06.05",
+            slug="never-null-nullable-columns",
+            rubric_bullet=5,
             description="Is there a discrepancy between what the schema allows and what the data contains?",
             fn=checks.check_never_null_nullable_columns,
         ),
         Check(
-            id="06.06",
+            slug="audit-timestamp-columns-have-nulls",
+            rubric_bullet=6,
             description="Are timestamp/audit columns consistently populated and reliable for change tracking?",
             fn=checks.check_audit_timestamp_columns_have_nulls,
         ),

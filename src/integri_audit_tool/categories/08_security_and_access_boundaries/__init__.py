@@ -25,31 +25,36 @@ from integri_audit_tool.registry import Check, CategoryModule
 from . import checks
 
 CATEGORY = CategoryModule(
-    number=8,
+    slug="security-and-access-boundaries",
     name="Security & Access Boundaries",
     checks=[
         Check(
-            id="08.01",
+            slug="login-superuser-roles",
+            rubric_bullet=1,
             description="Are database roles scoped by least privilege (no shared superuser login)?",
             fn=checks.check_login_superuser_roles,
         ),
         Check(
-            id="08.02",
+            slug="rls-enabled-without-policies",
+            rubric_bullet=2,
             description="Is row-level security in use where multi-tenant isolation is required?",
             fn=checks.check_rls_enabled_without_policies,
         ),
         Check(
-            id="08.04",
+            slug="undocumented-pii-and-ssl",
+            rubric_bullet=4,
             description="Is sensitive data flagged, and encrypted in transit appropriately?",
             fn=checks.check_undocumented_pii_and_ssl,
         ),
         Check(
-            id="08.05",
+            slug="audit-trail-availability",
+            rubric_bullet=5,
             description="Are audit logs available for who changed what?",
             fn=checks.check_audit_trail_availability,
         ),
         Check(
-            id="08.06",
+            slug="superuser-roles-without-expiration",
+            rubric_bullet=6,
             description="Are elevated/temporary access grants time-boxed with automatic expiration?",
             fn=checks.check_superuser_roles_without_expiration,
         ),

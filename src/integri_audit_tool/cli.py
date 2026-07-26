@@ -23,7 +23,7 @@ from integri_audit_tool.models import AuditReport, CategoryResult
 from integri_audit_tool.registry import discover_categories
 from integri_audit_tool.report.markdown import render
 from integri_audit_tool.reporter import AuditReporter, CompositeReporter
-from integri_audit_tool.runner import run_audit
+from integri_audit_tool.runner import _display_check_id, run_audit
 
 # Some Windows consoles default stdout/stderr to a legacy codepage rather than
 # UTF-8, which mangles the checkmarks/em-dashes the progress UI prints (a
@@ -222,7 +222,11 @@ def run(
         None, "--category", "-c", help="Limit to specific rubric category numbers (repeatable)."
     ),
     check: list[str] = typer.Option(
-        None, "--check", "-k", help='Limit to specific check ids, e.g. "01.04" (repeatable).'
+        None,
+        "--check",
+        "-k",
+        help='Limit to specific checks, by displayed id (e.g. "01.04") or stable slug '
+        '(e.g. "missing-foreign-keys") (repeatable).',
     ),
     progress: Optional[bool] = typer.Option(
         None,
@@ -330,7 +334,8 @@ def list_checks(
         if not cat.checks:
             typer.echo("  (no checks implemented yet)")
         for c in cat.checks:
-            typer.echo(f"  {c.id}  {c.description}")
+            display_id = _display_check_id(cat.number, c.rubric_bullet)
+            typer.echo(f"  {display_id}  ({c.slug})  {c.description}")
         typer.echo("")
 
 

@@ -43,7 +43,7 @@ def test_check_wal_archiving_failures_high_when_actively_failing(mocker):
     findings = checks.check_wal_archiving_failures(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "09.01"
+    assert findings[0].check_slug == "wal-archiving-failures"
     assert findings[0].severity == Severity.HIGH
     assert "active" in findings[0].title
 
@@ -82,7 +82,7 @@ def test_check_wal_archiving_status_summary_always_returns_one_informational_fin
     findings = checks.check_wal_archiving_status_summary(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "09.02"
+    assert findings[0].check_slug == "wal-archiving-status-summary"
     assert findings[0].severity == Severity.INFORMATIONAL
     assert "no wal archiving activity" in findings[0].observation.lower()
 
@@ -111,7 +111,7 @@ def test_check_migration_tracking_table_absent_flags_when_none_found(mocker):
     findings = checks.check_migration_tracking_table_absent(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "09.03"
+    assert findings[0].check_slug == "migration-tracking-table-absent"
     assert findings[0].severity == Severity.LOW
 
 
@@ -130,7 +130,7 @@ def test_check_replica_topology_absent_flags_when_zero(mocker):
     findings = checks.check_replica_topology_absent(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "09.04"
+    assert findings[0].check_slug == "replica-topology-absent"
     assert findings[0].severity == Severity.LOW
 
 

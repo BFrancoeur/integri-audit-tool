@@ -5,8 +5,8 @@ from integri_audit_tool.reporter import CompositeReporter, NullReporter
 
 def test_null_reporter_methods_are_all_no_ops():
     reporter = NullReporter()
-    category = CategoryModule(number=1, name="Test", checks=[])
-    check = Check(id="01.01", description="does a thing", fn=lambda conn, cfg: [])
+    category = CategoryModule(slug="test", number=1, name="Test", checks=[])
+    check = Check(slug="does-a-thing", rubric_bullet=1, description="does a thing", fn=lambda conn, cfg: [])
     result = CategoryResult(category_number=1, category_name="Test", status="completed")
 
     # None of these should raise or return anything meaningful.
@@ -30,13 +30,13 @@ class _RecordingReporter:
         self.events.append(("category_not_applicable", category.number))
 
     def check_started(self, category, check):
-        self.events.append(("check_started", check.id))
+        self.events.append(("check_started", check.slug))
 
     def check_succeeded(self, category, check, findings):
-        self.events.append(("check_succeeded", check.id))
+        self.events.append(("check_succeeded", check.slug))
 
     def check_failed(self, category, check, error):
-        self.events.append(("check_failed", check.id))
+        self.events.append(("check_failed", check.slug))
 
     def category_completed(self, category, result):
         self.events.append(("category_completed", category.number))
@@ -48,8 +48,8 @@ class _RecordingReporter:
 def test_composite_reporter_fans_every_call_out_to_all_reporters():
     a, b = _RecordingReporter(), _RecordingReporter()
     composite = CompositeReporter([a, b])
-    category = CategoryModule(number=1, name="Test", checks=[])
-    check = Check(id="01.01", description="does a thing", fn=lambda conn, cfg: [])
+    category = CategoryModule(slug="test", number=1, name="Test", checks=[])
+    check = Check(slug="does-a-thing", rubric_bullet=1, description="does a thing", fn=lambda conn, cfg: [])
     result = CategoryResult(category_number=1, category_name="Test", status="completed")
 
     composite.category_ready(category, [check])
@@ -63,9 +63,9 @@ def test_composite_reporter_fans_every_call_out_to_all_reporters():
     expected = [
         ("category_ready", 1),
         ("category_not_applicable", 1),
-        ("check_started", "01.01"),
-        ("check_succeeded", "01.01"),
-        ("check_failed", "01.01"),
+        ("check_started", "does-a-thing"),
+        ("check_succeeded", "does-a-thing"),
+        ("check_failed", "does-a-thing"),
         ("category_completed", 1),
         ("audit_completed",),
     ]

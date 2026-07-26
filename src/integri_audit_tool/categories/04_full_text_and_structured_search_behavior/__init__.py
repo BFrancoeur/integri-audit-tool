@@ -22,32 +22,37 @@ from integri_audit_tool.registry import Check, CategoryModule
 from . import checks
 
 CATEGORY = CategoryModule(
-    number=4,
+    slug="full-text-and-structured-search-behavior",
     name="Full-Text & Structured Search Behavior",
     applicability=checks.is_applicable,
     checks=[
         Check(
-            id="04.01",
+            slug="missing-fulltext-index",
+            rubric_bullet=1,
             description="Is full-text search using tsvector/tsquery with GIN indexing, or falling back to unindexable ILIKE?",
             fn=checks.check_missing_fulltext_index,
         ),
         Check(
-            id="04.02",
+            slug="tsvector-sync-mechanism",
+            rubric_bullet=2,
             description="Is the tsvector kept in sync via a generated column or trigger, not manually maintained?",
             fn=checks.check_tsvector_sync_mechanism,
         ),
         Check(
-            id="04.03",
+            slug="combined-structured-and-freetext-queries",
+            rubric_bullet=3,
             description="Are structured filters (JSONB containment) and free-text search combined efficiently in the same query?",
             fn=checks.check_combined_structured_and_freetext_queries,
         ),
         Check(
-            id="04.04",
+            slug="relevance-ranking",
+            rubric_bullet=4,
             description="Does search relevance ranking (ts_rank or equivalent) exist?",
             fn=checks.check_relevance_ranking,
         ),
         Check(
-            id="04.05",
+            slug="safe-tsquery-parsing",
+            rubric_bullet=5,
             description="Is query input handled through websearch_to_tsquery rather than raw string concatenation into tsquery?",
             fn=checks.check_safe_tsquery_parsing,
         ),

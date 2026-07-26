@@ -17,18 +17,13 @@ from integri_audit_tool.models import Finding, Severity
 
 from . import queries
 
-_CATEGORY_NUMBER = 7
-_CATEGORY_NAME = "Scale & Growth Readiness"
-
 _HIGH_SLOW_QUERY_MS = 5000
 _HIGH_BLOAT_RATIO = 0.5
 
 
-def _pg_stat_statements_unavailable_finding(check_id: str, bullet_summary: str) -> Finding:
+def _pg_stat_statements_unavailable_finding(check_slug: str, bullet_summary: str) -> Finding:
     return Finding(
-        category_number=_CATEGORY_NUMBER,
-        category_name=_CATEGORY_NAME,
-        check_id=check_id,
+        check_slug=check_slug,
         title=f"Could not assess ({bullet_summary}): pg_stat_statements is not installed",
         severity=Severity.INFORMATIONAL,
         observation=(
@@ -56,16 +51,14 @@ def _format_bytes(n: int) -> str:
 def check_slow_queries(conn: psycopg.Connection, config: AuditConfig) -> list[Finding]:
     """Rubric 07.01 — are any operations already showing measured degraded performance?"""
     if not queries.is_pg_stat_statements_available(conn):
-        return [_pg_stat_statements_unavailable_finding("07.01", "measured slow queries")]
+        return [_pg_stat_statements_unavailable_finding("slow-queries", "measured slow queries")]
 
     findings = []
     for row in queries.fetch_slow_queries(conn):
         severity = Severity.HIGH if row["mean_exec_time"] >= _HIGH_SLOW_QUERY_MS else Severity.MEDIUM
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="07.01",
+                check_slug="slow-queries",
                 title=f"Slow query: {row['mean_exec_time']:.0f}ms average over {row['calls']} calls",
                 severity=severity,
                 observation=(
@@ -92,9 +85,7 @@ def check_largest_tables(conn: psycopg.Connection, config: AuditConfig) -> list[
     lines = [f"{r['table_name']}: {_format_bytes(r['total_bytes'])}" for r in rows]
     return [
         Finding(
-            category_number=_CATEGORY_NUMBER,
-            category_name=_CATEGORY_NAME,
-            check_id="07.02",
+            check_slug="largest-tables",
             title=f"Current table footprint (top {len(rows)} by size)",
             severity=Severity.INFORMATIONAL,
             observation="Largest tables by total size (table + indexes + TOAST): " + "; ".join(lines),
@@ -118,9 +109,7 @@ def check_tenant_columns_without_rls(conn: psycopg.Connection, config: AuditConf
     for row in queries.fetch_tenant_columns_without_rls(conn):
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="07.03",
+                check_slug="tenant-columns-without-rls",
                 title=f"Tenant-shaped table without row-level security: {row['table_name']}",
                 severity=Severity.MEDIUM,
                 observation=(
@@ -154,9 +143,7 @@ def check_high_bloat_tables_without_tuning(conn: psycopg.Connection, config: Aud
         severity = Severity.HIGH if ratio >= _HIGH_BLOAT_RATIO else Severity.MEDIUM
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="07.04",
+                check_slug="high-bloat-tables-without-tuning",
                 title=f"High dead-tuple ratio on default autovacuum settings: {row['table_name']} ({ratio:.0%})",
                 severity=severity,
                 observation=(
@@ -189,9 +176,7 @@ def check_large_jsonb_on_hot_tables(conn: psycopg.Connection, config: AuditConfi
     for row in queries.fetch_large_jsonb_on_hot_tables(conn):
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="07.05",
+                check_slug="large-jsonb-on-hot-tables",
                 title=f"Significant TOAST storage on a frequently-accessed table: {row['table_name']}",
                 severity=Severity.MEDIUM,
                 observation=(

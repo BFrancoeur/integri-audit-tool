@@ -33,26 +33,30 @@ from integri_audit_tool.registry import Check, CategoryModule
 from . import checks
 
 CATEGORY = CategoryModule(
-    number=5,
+    slug="query-patterns-and-application-interaction",
     name="Query Patterns & Application Interaction",
     checks=[
         Check(
-            id="05.01",
+            slug="n-plus-one-candidates",
+            rubric_bullet=1,
             description="Evidence of N+1 query patterns (many small queries per page load instead of one joined/batched query)?",
             fn=checks.check_n_plus_one_candidates,
         ),
         Check(
-            id="05.03",
+            slug="offset-pagination",
+            rubric_bullet=3,
             description="Is pagination implemented efficiently (keyset/cursor-based) or via OFFSET at scale?",
             fn=checks.check_offset_pagination,
         ),
         Check(
-            id="05.04",
+            slug="idle-in-transaction-sessions",
+            rubric_bullet=4,
             description="Are transactions scoped appropriately, not held open unnecessarily?",
             fn=checks.check_idle_in_transaction_sessions,
         ),
         Check(
-            id="05.06",
+            slug="slow-query-monitoring",
+            rubric_bullet=6,
             description="Are slow queries logged and monitored, or only noticed anecdotally?",
             fn=checks.check_slow_query_monitoring,
         ),

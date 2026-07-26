@@ -28,7 +28,7 @@ def test_check_unused_indexes_builds_finding_from_row(mocker):
 
     assert len(findings) == 1
     finding = findings[0]
-    assert finding.check_id == "03.01"
+    assert finding.check_slug == "unused-indexes"
     assert finding.severity == Severity.LOW
     assert "idx_orders_legacy" in finding.title
 
@@ -48,7 +48,7 @@ def test_check_gin_usage_flags_jsonb_column_without_gin(mocker):
     findings = checks.check_gin_usage(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "03.02"
+    assert findings[0].check_slug == "gin-usage"
     assert findings[0].severity == Severity.MEDIUM
     assert "products.attributes" in findings[0].title
 
@@ -73,5 +73,5 @@ def test_check_redundant_indexes_flags_overlapping_group(mocker):
     findings = checks.check_redundant_indexes(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "03.04"
+    assert findings[0].check_slug == "redundant-indexes"
     assert "customer_id" in findings[0].title

@@ -26,26 +26,30 @@ from integri_audit_tool.registry import Check, CategoryModule
 from . import checks
 
 CATEGORY = CategoryModule(
-    number=9,
+    slug="backup-recovery-and-change-management",
     name="Backup, Recovery & Change Management",
     checks=[
         Check(
-            id="09.01",
+            slug="wal-archiving-failures",
+            rubric_bullet=1,
             description="Are backups automated and tested (restore drills), not just assumed to exist?",
             fn=checks.check_wal_archiving_failures,
         ),
         Check(
-            id="09.02",
+            slug="wal-archiving-status-summary",
+            rubric_bullet=2,
             description="Is there a documented RTO/RPO, and does current backup cadence meet it?",
             fn=checks.check_wal_archiving_status_summary,
         ),
         Check(
-            id="09.03",
+            slug="migration-tracking-table-absent",
+            rubric_bullet=3,
             description="Are schema changes version-controlled and applied through a repeatable process?",
             fn=checks.check_migration_tracking_table_absent,
         ),
         Check(
-            id="09.04",
+            slug="replica-topology-absent",
+            rubric_bullet=4,
             description="Is there a staging/replica environment for meaningful migration testing?",
             fn=checks.check_replica_topology_absent,
         ),

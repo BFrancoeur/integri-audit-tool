@@ -33,21 +33,24 @@ from integri_audit_tool.registry import Check, CategoryModule
 from . import checks
 
 CATEGORY = CategoryModule(
-    number=10,
+    slug="monitoring-and-observability",
     name="Monitoring & Observability",
     checks=[
         Check(
-            id="10.01",
+            slug="pg-stat-statements-installed",
+            rubric_bullet=1,
             description="Is pg_stat_statements (or equivalent) enabled and actually reviewed?",
             fn=checks.check_pg_stat_statements_installed,
         ),
         Check(
-            id="10.02",
+            slug="connection-saturation",
+            rubric_bullet=2,
             description="Are there alerts on connection saturation, replication lag, disk usage, and long-running queries?",
             fn=checks.check_connection_saturation,
         ),
         Check(
-            id="10.03",
+            slug="bloated-tables-without-recent-vacuum",
+            rubric_bullet=3,
             description="Is index/table bloat monitored, with a maintenance plan?",
             fn=checks.check_bloated_tables_without_recent_vacuum,
         ),

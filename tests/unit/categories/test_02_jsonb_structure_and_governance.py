@@ -34,7 +34,7 @@ def test_check_key_naming_drift_builds_finding_per_variant_group(mocker):
     findings = checks.check_key_naming_drift(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "02.02"
+    assert findings[0].check_slug == "key-naming-drift"
     assert findings[0].severity == Severity.LOW
     assert "diameterin" in findings[0].title
 
@@ -56,7 +56,7 @@ def test_check_key_type_inconsistency_builds_finding_per_key(mocker):
     findings = checks.check_key_type_inconsistency(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "02.03"
+    assert findings[0].check_slug == "key-type-inconsistency"
     assert findings[0].severity == Severity.MEDIUM
     assert "price" in findings[0].title
     assert "42" in findings[0].observation
@@ -72,7 +72,7 @@ def test_check_missing_validation_layer_flags_unvalidated_column(mocker):
     findings = checks.check_missing_validation_layer(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "02.04"
+    assert findings[0].check_slug == "missing-validation-layer"
     assert findings[0].severity == Severity.LOW
     assert "products.attrs" in findings[0].title
 

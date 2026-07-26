@@ -21,7 +21,7 @@ def test_check_table_documentation_coverage_flags_when_none_documented(mocker):
     findings = checks.check_table_documentation_coverage(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "11.01"
+    assert findings[0].check_slug == "table-documentation-coverage"
     assert findings[0].severity == Severity.LOW
 
 
@@ -53,7 +53,7 @@ def test_check_undocumented_jsonb_column_rationale_flags_row(mocker):
     findings = checks.check_undocumented_jsonb_column_rationale(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "11.02"
+    assert findings[0].check_slug == "undocumented-jsonb-column-rationale"
     assert findings[0].severity == Severity.LOW
     assert "products.attrs" in findings[0].title
 
@@ -73,7 +73,7 @@ def test_check_jsonb_without_schema_registry_flags_when_missing(mocker):
     findings = checks.check_jsonb_without_schema_registry(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "11.03"
+    assert findings[0].check_slug == "jsonb-without-schema-registry"
     assert findings[0].severity == Severity.LOW
 
 

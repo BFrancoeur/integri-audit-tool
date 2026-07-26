@@ -29,21 +29,24 @@ from integri_audit_tool.registry import Check, CategoryModule
 from . import checks
 
 CATEGORY = CategoryModule(
-    number=11,
+    slug="documentation-and-institutional-knowledge",
     name="Documentation & Institutional Knowledge",
     checks=[
         Check(
-            id="11.01",
+            slug="table-documentation-coverage",
+            rubric_bullet=1,
             description="Is the schema documented anywhere outside the schema itself (ERD, data dictionary, README)?",
             fn=checks.check_table_documentation_coverage,
         ),
         Check(
-            id="11.02",
+            slug="undocumented-jsonb-column-rationale",
+            rubric_bullet=2,
             description="Is there a record of why key architectural decisions (e.g. JSONB) were made?",
             fn=checks.check_undocumented_jsonb_column_rationale,
         ),
         Check(
-            id="11.03",
+            slug="jsonb-without-schema-registry",
+            rubric_bullet=3,
             description="Would a new engineer understand the intended structure of JSONB attributes without reverse-engineering it from data?",
             fn=checks.check_jsonb_without_schema_registry,
         ),

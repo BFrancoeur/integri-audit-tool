@@ -16,9 +16,6 @@ from integri_audit_tool.models import Finding, Severity
 
 from . import queries
 
-_CATEGORY_NUMBER = 4
-_CATEGORY_NAME = "Full-Text & Structured Search Behavior"
-
 
 def is_applicable(conn: psycopg.Connection) -> bool:
     """Category is N/A when the schema has no tsvector columns at all (per rubric guidance)."""
@@ -31,9 +28,7 @@ def check_missing_fulltext_index(conn: psycopg.Connection, config: AuditConfig) 
     for row in queries.fetch_tsvector_columns_without_fulltext_index(conn):
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="04.01",
+                check_slug="missing-fulltext-index",
                 title=f"tsvector column without a full-text index: {row['table_name']}.{row['column_name']}",
                 severity=Severity.MEDIUM,
                 observation=(
@@ -57,9 +52,7 @@ def check_tsvector_sync_mechanism(conn: psycopg.Connection, config: AuditConfig)
     for row in queries.fetch_tsvector_columns_without_sync_mechanism(conn):
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="04.02",
+                check_slug="tsvector-sync-mechanism",
                 title=f"tsvector column without an automatic sync mechanism: {row['table_name']}.{row['column_name']}",
                 severity=Severity.MEDIUM,
                 observation=(
@@ -81,11 +74,9 @@ def check_tsvector_sync_mechanism(conn: psycopg.Connection, config: AuditConfig)
     return findings
 
 
-def _pg_stat_statements_unavailable_finding(check_id: str, bullet_summary: str) -> Finding:
+def _pg_stat_statements_unavailable_finding(check_slug: str, bullet_summary: str) -> Finding:
     return Finding(
-        category_number=_CATEGORY_NUMBER,
-        category_name=_CATEGORY_NAME,
-        check_id=check_id,
+        check_slug=check_slug,
         title=f"Could not assess ({bullet_summary}): pg_stat_statements is not installed",
         severity=Severity.INFORMATIONAL,
         observation=(
@@ -106,7 +97,7 @@ def check_combined_structured_and_freetext_queries(
 ) -> list[Finding]:
     """Rubric 04.03 — are structured (JSONB) filters and free-text search combined in the same query?"""
     if not queries.is_pg_stat_statements_available(conn):
-        return [_pg_stat_statements_unavailable_finding("04.03", "structured + free-text composition")]
+        return [_pg_stat_statements_unavailable_finding("combined-structured-and-freetext-queries", "structured + free-text composition")]
 
     stats = queries.fetch_freetext_and_structured_combination_stats(conn)
     if stats["freetext_statement_count"] == 0 or stats["combined_statement_count"] > 0:
@@ -114,9 +105,7 @@ def check_combined_structured_and_freetext_queries(
 
     return [
         Finding(
-            category_number=_CATEGORY_NUMBER,
-            category_name=_CATEGORY_NAME,
-            check_id="04.03",
+            check_slug="combined-structured-and-freetext-queries",
             title="Free-text search and JSONB structured filters appear to be separate query paths",
             severity=Severity.LOW,
             observation=(
@@ -140,7 +129,7 @@ def check_combined_structured_and_freetext_queries(
 def check_relevance_ranking(conn: psycopg.Connection, config: AuditConfig) -> list[Finding]:
     """Rubric 04.04 — does search relevance ranking (ts_rank or equivalent) exist?"""
     if not queries.is_pg_stat_statements_available(conn):
-        return [_pg_stat_statements_unavailable_finding("04.04", "relevance ranking")]
+        return [_pg_stat_statements_unavailable_finding("relevance-ranking", "relevance ranking")]
 
     stats = queries.fetch_freetext_ranking_stats(conn)
     if stats["freetext_statement_count"] == 0 or stats["ranked_statement_count"] > 0:
@@ -148,9 +137,7 @@ def check_relevance_ranking(conn: psycopg.Connection, config: AuditConfig) -> li
 
     return [
         Finding(
-            category_number=_CATEGORY_NUMBER,
-            category_name=_CATEGORY_NAME,
-            check_id="04.04",
+            check_slug="relevance-ranking",
             title="Free-text search queries found with no relevance ranking",
             severity=Severity.LOW,
             observation=(
@@ -167,7 +154,7 @@ def check_relevance_ranking(conn: psycopg.Connection, config: AuditConfig) -> li
 def check_safe_tsquery_parsing(conn: psycopg.Connection, config: AuditConfig) -> list[Finding]:
     """Rubric 04.05 — is query input handled through websearch_to_tsquery rather than raw to_tsquery?"""
     if not queries.is_pg_stat_statements_available(conn):
-        return [_pg_stat_statements_unavailable_finding("04.05", "safe tsquery parsing")]
+        return [_pg_stat_statements_unavailable_finding("safe-tsquery-parsing", "safe tsquery parsing")]
 
     stats = queries.fetch_raw_tsquery_usage(conn)
     if stats["raw_tsquery_statement_count"] == 0:
@@ -176,9 +163,7 @@ def check_safe_tsquery_parsing(conn: psycopg.Connection, config: AuditConfig) ->
     examples = "; ".join(stats["example_queries"] or [])
     return [
         Finding(
-            category_number=_CATEGORY_NUMBER,
-            category_name=_CATEGORY_NAME,
-            check_id="04.05",
+            check_slug="safe-tsquery-parsing",
             title="Raw to_tsquery() usage found without websearch_to_tsquery/plainto_tsquery",
             severity=Severity.MEDIUM,
             observation=(

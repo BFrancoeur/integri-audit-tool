@@ -3,23 +3,24 @@ from integri_audit_tool.models import CategoryResult, Finding, Severity
 from integri_audit_tool.registry import Check, CategoryModule
 
 
-def _category(number=1, checks=None):
-    return CategoryModule(number=number, name="Test Category", checks=checks or [])
+def _category(number=1, slug="schema-design-and-normalization-boundaries", checks=None):
+    return CategoryModule(slug=slug, number=number, name="Test Category", checks=checks or [])
 
 
-def _check(check_id="01.01"):
-    return Check(id=check_id, description="does a thing", fn=lambda conn, cfg: [])
+def _check(slug="missing-foreign-keys"):
+    return Check(slug=slug, rubric_bullet=1, description="does a thing", fn=lambda conn, cfg: [])
 
 
 def _result(number=1, status="completed"):
     return CategoryResult(category_number=number, category_name="Test Category", status=status)
 
 
-def _finding(title="Something found", severity=Severity.MEDIUM, check_id="01.01"):
+def _finding(title="Something found", severity=Severity.MEDIUM, check_slug="missing-foreign-keys"):
     return Finding(
+        check_slug=check_slug,
         category_number=1,
         category_name="Test Category",
-        check_id=check_id,
+        check_id="01.01",
         title=title,
         severity=severity,
         observation="obs",
@@ -40,7 +41,7 @@ def test_check_failed_writes_log_file(tmp_path):
     log_files = list(logs_dir.glob("*.log"))
     assert len(log_files) == 1
     content = log_files[0].read_text(encoding="utf-8")
-    assert "01.01" in content
+    assert "missing-foreign-keys" in content
     assert "something broke" in content
 
 
@@ -79,7 +80,7 @@ def test_category_completed_prints_alias_for_an_announced_completed_category(tmp
 
 def test_category_completed_falls_back_to_category_number_without_a_known_alias(tmp_path, capsys):
     reporter = CliProgressReporter(logs_dir=tmp_path / "logs")
-    category = _category(number=999, checks=[_check()])
+    category = _category(number=999, slug="unknown-category", checks=[_check()])
 
     reporter.category_ready(category, [_check()])
     reporter.category_completed(category, _result(number=999, status="completed"))
@@ -141,7 +142,7 @@ def test_check_succeeded_prints_green_passed_when_no_findings(tmp_path, capsys):
     reporter.check_succeeded(category, check, [])
 
     out = capsys.readouterr().err
-    assert "✓ 01.01 passed" in out
+    assert "✓ missing-foreign-keys passed" in out
     assert "✗" not in out
     assert "completed" not in out
 
@@ -160,7 +161,7 @@ def test_check_succeeded_prints_red_x_completed_when_findings_exist_even_low_sev
     reporter.check_succeeded(category, check, findings)
 
     out = capsys.readouterr().err
-    assert "✗ 01.01 completed" in out
+    assert "✗ missing-foreign-keys completed" in out
     assert "(1 finding(s))" in out
     assert "✓" not in out
     assert "passed" not in out

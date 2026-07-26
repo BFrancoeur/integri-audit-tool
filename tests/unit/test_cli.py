@@ -42,7 +42,12 @@ def test_is_interactive_terminal_true_under_msys_even_if_isatty_is_false(monkeyp
 def test_incremental_report_writer_creates_file_after_first_category(tmp_path):
     md_path = tmp_path / "audit.md"
     writer = _IncrementalReportWriter(md_path, target_label="test-db")
-    category = CategoryModule(number=1, name="Schema Design & Normalization Boundaries", checks=[])
+    category = CategoryModule(
+        slug="schema-design-and-normalization-boundaries",
+        number=1,
+        name="Schema Design & Normalization Boundaries",
+        checks=[],
+    )
     result = CategoryResult(category_number=1, category_name=category.name, status="completed")
 
     assert not md_path.exists()
@@ -56,6 +61,7 @@ def test_incremental_report_writer_accumulates_across_categories_in_the_same_fil
     md_path = tmp_path / "audit.md"
     writer = _IncrementalReportWriter(md_path, target_label="test-db")
     finding = Finding(
+        check_slug="test-finding",
         category_number=1,
         category_name="A",
         check_id="01.01",
@@ -65,12 +71,12 @@ def test_incremental_report_writer_accumulates_across_categories_in_the_same_fil
     )
 
     writer.category_completed(
-        CategoryModule(number=1, name="A", checks=[]),
+        CategoryModule(slug="a", number=1, name="A", checks=[]),
         CategoryResult(category_number=1, category_name="A", status="completed", findings=[finding]),
     )
     first_write_paths = list(tmp_path.glob("*.md"))
     writer.category_completed(
-        CategoryModule(number=2, name="B", checks=[]),
+        CategoryModule(slug="b", number=2, name="B", checks=[]),
         CategoryResult(category_number=2, category_name="B", status="completed"),
     )
 

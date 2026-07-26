@@ -35,7 +35,7 @@ def test_check_missing_fulltext_index_flags_unindexed_column(mocker):
     findings = checks.check_missing_fulltext_index(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "04.01"
+    assert findings[0].check_slug == "missing-fulltext-index"
     assert findings[0].severity == Severity.MEDIUM
     assert "articles.search_vector" in findings[0].title
 
@@ -55,7 +55,7 @@ def test_check_tsvector_sync_mechanism_flags_unmaintained_column(mocker):
     findings = checks.check_tsvector_sync_mechanism(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "04.02"
+    assert findings[0].check_slug == "tsvector-sync-mechanism"
     assert findings[0].severity == Severity.MEDIUM
     assert "products.search_vector" in findings[0].title
 
@@ -75,7 +75,7 @@ def test_check_combined_structured_and_freetext_queries_informational_when_unava
     findings = checks.check_combined_structured_and_freetext_queries(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "04.03"
+    assert findings[0].check_slug == "combined-structured-and-freetext-queries"
     assert findings[0].severity == Severity.INFORMATIONAL
 
 
@@ -90,7 +90,7 @@ def test_check_combined_structured_and_freetext_queries_flags_when_none_combined
     findings = checks.check_combined_structured_and_freetext_queries(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "04.03"
+    assert findings[0].check_slug == "combined-structured-and-freetext-queries"
     assert findings[0].severity == Severity.LOW
 
 
@@ -120,7 +120,7 @@ def test_check_relevance_ranking_informational_when_unavailable(mocker):
     findings = checks.check_relevance_ranking(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "04.04"
+    assert findings[0].check_slug == "relevance-ranking"
     assert findings[0].severity == Severity.INFORMATIONAL
 
 
@@ -135,7 +135,7 @@ def test_check_relevance_ranking_flags_when_none_ranked(mocker):
     findings = checks.check_relevance_ranking(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "04.04"
+    assert findings[0].check_slug == "relevance-ranking"
     assert findings[0].severity == Severity.LOW
 
 
@@ -165,7 +165,7 @@ def test_check_safe_tsquery_parsing_informational_when_unavailable(mocker):
     findings = checks.check_safe_tsquery_parsing(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "04.05"
+    assert findings[0].check_slug == "safe-tsquery-parsing"
     assert findings[0].severity == Severity.INFORMATIONAL
 
 
@@ -183,7 +183,7 @@ def test_check_safe_tsquery_parsing_flags_raw_usage(mocker):
     findings = checks.check_safe_tsquery_parsing(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "04.05"
+    assert findings[0].check_slug == "safe-tsquery-parsing"
     assert findings[0].severity == Severity.MEDIUM
     assert "to_tsquery" in findings[0].evidence
 

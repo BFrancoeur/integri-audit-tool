@@ -20,9 +20,6 @@ from integri_audit_tool.models import Finding, Severity
 
 from . import queries
 
-_CATEGORY_NUMBER = 10
-_CATEGORY_NAME = "Monitoring & Observability"
-
 _HIGH_CONNECTION_SATURATION_RATIO = 0.8
 _HIGH_QUERY_DURATION_MULTIPLE = 3
 """A running query at >= this multiple of LONG_RUNNING_QUERY_THRESHOLD escalates to High."""
@@ -35,9 +32,7 @@ def check_pg_stat_statements_installed(conn: psycopg.Connection, config: AuditCo
 
     return [
         Finding(
-            category_number=_CATEGORY_NUMBER,
-            category_name=_CATEGORY_NAME,
-            check_id="10.01",
+            check_slug="pg-stat-statements-installed",
             title="pg_stat_statements is not installed",
             severity=Severity.MEDIUM,
             observation="The pg_stat_statements extension is not installed on this database.",
@@ -70,9 +65,7 @@ def check_connection_saturation(conn: psycopg.Connection, config: AuditConfig) -
         if ratio >= _HIGH_CONNECTION_SATURATION_RATIO:
             findings.append(
                 Finding(
-                    category_number=_CATEGORY_NUMBER,
-                    category_name=_CATEGORY_NAME,
-                    check_id="10.02",
+                    check_slug="connection-saturation",
                     title=f"Connection usage near saturation ({ratio:.0%} of max_connections)",
                     severity=Severity.HIGH,
                     observation=(
@@ -97,9 +90,7 @@ def check_connection_saturation(conn: psycopg.Connection, config: AuditConfig) -
         )
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="10.02",
+                check_slug="connection-saturation",
                 title=f"Long-running active query (pid {row['pid']}, running {duration})",
                 severity=severity,
                 observation=(
@@ -125,9 +116,7 @@ def check_bloated_tables_without_recent_vacuum(
         ratio = row["dead_tuple_ratio"]
         findings.append(
             Finding(
-                category_number=_CATEGORY_NUMBER,
-                category_name=_CATEGORY_NAME,
-                check_id="10.03",
+                check_slug="bloated-tables-without-recent-vacuum",
                 title=f"Bloat present with no recent vacuum: {row['table_name']} ({ratio:.0%})",
                 severity=Severity.MEDIUM,
                 observation=(

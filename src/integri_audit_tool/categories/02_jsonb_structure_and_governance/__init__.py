@@ -18,22 +18,25 @@ from integri_audit_tool.registry import Check, CategoryModule
 from . import checks
 
 CATEGORY = CategoryModule(
-    number=2,
+    slug="jsonb-structure-and-governance",
     name="JSONB Structure & Governance",
     applicability=checks.is_applicable,
     checks=[
         Check(
-            id="02.02",
+            slug="key-naming-drift",
+            rubric_bullet=2,
             description="Are there inconsistent key names for the same concept (diameter vs dia vs diameter_in)?",
             fn=checks.check_key_naming_drift,
         ),
         Check(
-            id="02.03",
+            slug="key-type-inconsistency",
+            rubric_bullet=3,
             description="Are there type inconsistencies for the same key (numeric in some rows, string in others)?",
             fn=checks.check_key_type_inconsistency,
         ),
         Check(
-            id="02.04",
+            slug="missing-validation-layer",
+            rubric_bullet=4,
             description="Is there a validation layer preventing malformed JSONB from being written?",
             fn=checks.check_missing_validation_layer,
         ),

@@ -19,7 +19,7 @@ def test_check_slow_queries_informational_when_unavailable(mocker):
     findings = checks.check_slow_queries(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "07.01"
+    assert findings[0].check_slug == "slow-queries"
     assert findings[0].severity == Severity.INFORMATIONAL
 
 
@@ -36,7 +36,7 @@ def test_check_slow_queries_flags_medium_below_high_threshold(mocker):
     findings = checks.check_slow_queries(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "07.01"
+    assert findings[0].check_slug == "slow-queries"
     assert findings[0].severity == Severity.MEDIUM
 
 
@@ -74,7 +74,7 @@ def test_check_largest_tables_builds_single_informational_finding(mocker):
     findings = checks.check_largest_tables(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "07.02"
+    assert findings[0].check_slug == "largest-tables"
     assert findings[0].severity == Severity.INFORMATIONAL
     assert "orders" in findings[0].observation
     assert "GB" in findings[0].observation
@@ -95,7 +95,7 @@ def test_check_tenant_columns_without_rls_flags_row(mocker):
     findings = checks.check_tenant_columns_without_rls(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "07.03"
+    assert findings[0].check_slug == "tenant-columns-without-rls"
     assert findings[0].severity == Severity.MEDIUM
     assert "invoices" in findings[0].title
 
@@ -123,7 +123,7 @@ def test_check_high_bloat_tables_flags_medium_below_high_threshold(mocker):
     findings = checks.check_high_bloat_tables_without_tuning(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "07.04"
+    assert findings[0].check_slug == "high-bloat-tables-without-tuning"
     assert findings[0].severity == Severity.MEDIUM
 
 
@@ -169,7 +169,7 @@ def test_check_large_jsonb_on_hot_tables_flags_row(mocker):
     findings = checks.check_large_jsonb_on_hot_tables(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "07.05"
+    assert findings[0].check_slug == "large-jsonb-on-hot-tables"
     assert findings[0].severity == Severity.MEDIUM
     assert "products" in findings[0].title
 

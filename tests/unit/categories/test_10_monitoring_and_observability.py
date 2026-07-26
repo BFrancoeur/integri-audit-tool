@@ -18,7 +18,7 @@ def test_check_pg_stat_statements_installed_flags_when_missing(mocker):
     findings = checks.check_pg_stat_statements_installed(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "10.01"
+    assert findings[0].check_slug == "pg-stat-statements-installed"
     assert findings[0].severity == Severity.MEDIUM
 
 
@@ -42,7 +42,7 @@ def test_check_connection_saturation_flags_high_usage(mocker):
     findings = checks.check_connection_saturation(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "10.02"
+    assert findings[0].check_slug == "connection-saturation"
     assert findings[0].severity == Severity.HIGH
     assert "85%" in findings[0].title
 
@@ -81,7 +81,7 @@ def test_check_connection_saturation_flags_medium_for_long_running_query(mocker)
     findings = checks.check_connection_saturation(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "10.02"
+    assert findings[0].check_slug == "connection-saturation"
     assert findings[0].severity == Severity.MEDIUM
     assert "111" in findings[0].title
 
@@ -135,7 +135,7 @@ def test_check_connection_saturation_combines_both_subchecks(mocker):
     findings = checks.check_connection_saturation(conn=object(), config=None)
 
     assert len(findings) == 2
-    assert {f.check_id for f in findings} == {"10.02"}
+    assert {f.check_slug for f in findings} == {"connection-saturation"}
 
 
 def test_check_bloated_tables_without_recent_vacuum_flags_row(mocker):
@@ -158,7 +158,7 @@ def test_check_bloated_tables_without_recent_vacuum_flags_row(mocker):
     findings = checks.check_bloated_tables_without_recent_vacuum(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "10.03"
+    assert findings[0].check_slug == "bloated-tables-without-recent-vacuum"
     assert findings[0].severity == Severity.MEDIUM
     assert "sessions" in findings[0].title
 

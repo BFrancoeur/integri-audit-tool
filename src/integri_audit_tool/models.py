@@ -21,14 +21,29 @@ class Severity(str, Enum):
     INFORMATIONAL = "Informational"
 
 
+_UNSTAMPED_CATEGORY_NUMBER = 0
+_UNSTAMPED_CATEGORY_NAME = ""
+_UNSTAMPED_CHECK_ID = ""
+"""Placeholders for the fields runner.py stamps onto every Finding after a
+check function returns it — a check function itself has no way to know its
+own category's computed number/name or its own displayed check id, only its
+stable `check_slug`."""
+
+
 @dataclass(frozen=True)
 class Finding:
-    category_number: int
-    category_name: str
-    check_id: str
+    check_slug: str
+    """Stable identity of the check that produced this finding, e.g.
+    "missing-foreign-keys" — set by the check function itself, always required."""
     title: str
     severity: Severity
     observation: str
+    category_number: int = _UNSTAMPED_CATEGORY_NUMBER
+    category_name: str = _UNSTAMPED_CATEGORY_NAME
+    check_id: str = _UNSTAMPED_CHECK_ID
+    """Displayed "NN.NN" id at the time of this run — computed and stamped by
+    runner.py from the category's current position in the rubric, not set by
+    the check function."""
     evidence: str | None = None
     business_impact: str = ""
     recommended_direction: str = ""

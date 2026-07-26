@@ -28,7 +28,7 @@ def test_check_missing_foreign_keys_flags_unconstrained_fk_shaped_column(mocker)
     findings = checks.check_missing_foreign_keys(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "01.04"
+    assert findings[0].check_slug == "missing-foreign-keys"
     assert findings[0].severity == Severity.MEDIUM
     assert "orders.customer_id" in findings[0].title
 
@@ -55,7 +55,7 @@ def test_check_schema_drift_flags_type_mismatch_as_medium(mocker):
     findings = checks.check_schema_drift(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "01.05"
+    assert findings[0].check_slug == "schema-drift"
     assert findings[0].severity == Severity.MEDIUM
     assert "naming and type" in findings[0].title
 
@@ -92,7 +92,7 @@ def test_check_primary_key_consistency_flags_table_without_pk(mocker):
     findings = checks.check_primary_key_consistency(conn=object(), config=None)
 
     assert len(findings) == 1
-    assert findings[0].check_id == "01.06"
+    assert findings[0].check_slug == "primary-key-consistency"
     assert findings[0].severity == Severity.HIGH
     assert "logs" in findings[0].title
 
