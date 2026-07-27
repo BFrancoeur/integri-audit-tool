@@ -121,11 +121,18 @@
 - [ ] Are database roles scoped by least privilege (read-only reporting roles, app roles without superuser, no shared "one login for everything")?
 - [ ] Is row-level security in use where multi-tenant isolation is required, or is isolation enforced only in application logic?
 - [ ] Are secrets (connection strings, credentials) stored outside version control and application code?
-- [ ] Is sensitive data (PII, payment info) flagged, and encrypted at rest / in transit appropriately?
+- [ ] Is sensitive data (PII, payment info) flagged, and encrypted in transit appropriately?
 - [ ] Are audit logs available for who changed what, or is change history unrecoverable?
 - [ ] Are elevated or temporary access grants (contractor access, incident response, one-off admin tasks) time-boxed with automatic expiration, or granted indefinitely and relied on someone remembering to revoke?
+- [ ] Is there a documented, signed-off authentication & access-control policy, with a named owner (DBA/IT/security contact), or is access governed by informal/undocumented practice?
+- [ ] Is there a defined process for detecting and revoking unauthorized access (a compromised credential, an unexpected login), or does that depend on someone noticing by chance?
+- [ ] Is there a documented offboarding process that revokes database access when someone with access leaves the company or changes roles?
+- [ ] Are secrets/passwords rotated on a defined schedule, and is multi-factor authentication enforced for privileged/human access?
+- [ ] Is the database encrypted at rest?
 
 **What "good" looks like:** Access is least-privilege by default, temporary/elevated access expires automatically rather than depending on manual revocation, and the audit trail exists independent of trusting application-layer discipline.
+
+**Scope note:** The first six bullets above are verified directly — the tool reads them from the database itself, no sign-off needed. The last five are confirmed by **attestation**: the client/DBA signs off that each is in place. The tool can't see encryption at rest, a rotation schedule, MFA enforcement, or a policy document from inside Postgres — none of that leaves a trace in the database's own catalogs — but each is still core database security posture, so it stays on the checklist rather than being silently dropped. In plain terms: if it's queryable, it's verified and reported; if it isn't but still matters, it's asked for and the answer (or its absence) is recorded — never independently tested. Authentication/authorization *architecture* (identity provider design, role-hierarchy redesign) is a different matter entirely and is not part of this checklist — see "Explicitly Out of Scope: Network & Authentication Testing" below.
 
 ---
 
@@ -178,16 +185,16 @@
 
 ---
 
-## Explicitly Out of Scope: Network & Infrastructure Security
+## Explicitly Out of Scope: Network & Authentication Testing
 
-**This is a database audit, not a network or infrastructure security assessment.** The boundary below is deliberate, not a placeholder for future tooling — these items sit in a different discipline with a different authorization and liability profile than reading a database with credentials a client has already granted. Folding them into a database audit, even informally, risks scope creep into unauthorized security testing.
+**This is a database audit — it reads a database with credentials already granted for that purpose. It is not a penetration test, and it does not test, attack, or attempt to defeat any authentication or network control.** The items below are permanently excluded, not because they don't matter, but because testing them requires a different kind of engagement — different authorization, different tooling, different insurance/liability coverage — than reading a database with credentials the client already gave us.
 
-- Network-level security: open port scanning, firewall/security-group configuration review, VPN or bastion-host setup, exposed-service enumeration.
-- Penetration testing or vulnerability scanning of any kind, against the database host, application servers, or surrounding infrastructure.
-- OS/host-level hardening (patch levels, running services, filesystem permissions) beyond what's directly visible through the database connection itself.
-- Application-layer security (authentication flows, session management, API security) unless the finding is directly visible from within the database — see Category 8's role, row-level-security, and audit-trail checks for what that looks like in practice.
+- **Network & infrastructure security** — network access, port scanning, firewall/VPN/bastion configuration, exposed-service enumeration, OS/host-level hardening, or any penetration testing of hosts or infrastructure.
+- **Authentication attacks** — brute-force, credential-stuffing, password-spraying, or any attempt to defeat a login, session, or MFA/SSO mechanism.
+- **Application/API authentication logic** — reviewing or testing login flows, session/cookie handling, or API auth (JWTs, API keys, middleware) sitting in front of the database.
+- **Authentication/authorization architecture design** — identity provider setup, federation, or role-hierarchy redesign. If a gap is evident from Category 8's attestation checklist or elsewhere, it's named as a single finding ("access control design has gaps, recommend a dedicated review") — not audited in depth or fixed here.
 
-**Why this boundary exists:** Testing any of the above without separate, explicit written authorization is a materially different ask than auditing a database with credentials already granted for that purpose — it starts to look like unauthorized security testing regardless of intent. If network/infrastructure security work is ever offered as part of this service, it should be scoped, authorized, priced, and (if applicable) insured as its own distinct engagement — not backed into through scope creep on a database audit.
+**Why this boundary exists, in plain terms:** Attempting to break into a login, a network, or an identity system — even to test it — is a fundamentally different kind of work than reading a database with credentials you've already given us. Doing it without its own separate written authorization would look like unauthorized security testing regardless of intent, and would expose both sides to risk neither party signed up for. If any of this is ever needed, it should be scoped, authorized, and priced as its own engagement — not folded into a database audit.
 
 ---
 

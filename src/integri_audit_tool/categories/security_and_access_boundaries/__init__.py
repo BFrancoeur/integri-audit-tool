@@ -1,6 +1,6 @@
 """Rubric category 8: Security & Access Boundaries.
 
-5 of the rubric's 6 checklist bullets are implemented, all from read-only
+5 of the rubric's 11 checklist bullets are implemented, all from read-only
 catalog access (pg_roles, pg_policies, pg_settings, pg_extension) — no row
 sampling, no pg_stat_statements dependency:
 - 08.01 login roles with SUPERUSER (least-privilege violation candidates)
@@ -9,13 +9,23 @@ sampling, no pg_stat_statements dependency:
   enabled at all — see queries.py for why these aren't the same check)
 - 08.04 PII-heuristic columns with no documentation, and server SSL not
   enabled (both sub-checks live under one bullet, matching the rubric's own
-  "flagged, and encrypted... appropriately" wording)
+  "flagged, and encrypted in transit appropriately" wording)
 - 08.05 no audit trail mechanism (neither pgaudit nor log_statement active)
 - 08.06 superuser roles with no VALID UNTIL expiration
 
-08.03 (secrets stored outside version control and application code) is
-declared via `out_of_scope`: nothing about where an application's config or
-.env files live is visible from inside the database it connects to.
+The remaining 6 bullets are declared via `out_of_scope`, for two different
+reasons:
+- 08.03 (secrets stored outside version control and application code):
+  nothing about where an application's config or .env files live is visible
+  from inside the database it connects to.
+- 08.07-08.11 (documented/signed-off access policy, unauthorized-access
+  response, offboarding revocation, secret/MFA rotation, encryption at
+  rest): the rubric's Category 8 scope note calls these attestation items
+  by design, not unimplemented checks — a read-only connection can't see a
+  policy document being signed off, or a hosting provider's disk-encryption
+  toggle, no matter how the tool evolves. Same shape as category 12's
+  manual-confirmation bullets: the client/DBA signs off, the tool records
+  the answer, nothing here is independently tested.
 
 No `applicability` — every database has roles, so this category is never N/A.
 """
@@ -63,5 +73,9 @@ CATEGORY = CategoryModule(
         "Security & Access Boundaries, bullet 3 (are secrets like connection strings and credentials stored outside "
         "version control and application code?) — nothing about where an application's configuration or "
         ".env files live is visible from inside the database it connects to.",
+        "Security & Access Boundaries, bullets 7-11 (documented/signed-off access policy, unauthorized-access "
+        "response process, offboarding revocation process, secret/password rotation and MFA enforcement, "
+        "encryption at rest) — attestation items by design: the client/DBA signs off that each is in place, since "
+        "none of them leave a trace inside Postgres itself for a read-only connection to verify independently.",
     ],
 )

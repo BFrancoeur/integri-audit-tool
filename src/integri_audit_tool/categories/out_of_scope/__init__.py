@@ -26,18 +26,24 @@ _COMPLIANCE_AND_DATA_PRIVACY_NOTE = (
     "own. This is a legal/compliance review, not a database audit finding."
 )
 
-_NETWORK_AND_INFRASTRUCTURE_SECURITY_NOTE = (
-    "Network & Infrastructure Security — network-level security (port scanning, "
-    "firewall/security-group review, VPN/bastion-host setup, exposed-service "
-    "enumeration), penetration testing or vulnerability scanning of any kind, "
-    "OS/host-level hardening beyond what's visible through the database connection "
-    "itself, and application-layer security (authentication flows, session "
-    "management, API security) outside what's directly visible from within the "
-    "database. This is a different discipline with a different authorization and "
-    "liability profile than reading a database with credentials already granted "
-    "for that purpose — testing any of the above without separate, explicit "
-    "written authorization risks looking like unauthorized security testing "
-    "regardless of intent."
+_NETWORK_AND_AUTHENTICATION_TESTING_NOTE = (
+    "Network & Authentication Testing — network access, port scanning, "
+    "firewall/VPN/bastion configuration, exposed-service enumeration, OS/host-"
+    "level hardening, or any penetration testing of hosts or infrastructure; "
+    "authentication attacks (brute-force, credential-stuffing, password-"
+    "spraying) or any attempt to defeat a login, session, or MFA/SSO mechanism; "
+    "application/API authentication logic (login flows, session/cookie "
+    "handling, JWTs, API keys, middleware) sitting in front of the database; "
+    "and authentication/authorization architecture design (identity provider "
+    "setup, federation, role-hierarchy redesign) — surfaced, if evident, as a "
+    "single 'access control design has gaps' finding, not audited in depth. "
+    "This is a database audit, not a penetration test: it reads a database "
+    "with credentials already granted for that purpose and does not test, "
+    "attack, or attempt to defeat any authentication or network control. "
+    "Testing any of the above without separate, explicit written authorization "
+    "risks looking like unauthorized security testing regardless of intent — a "
+    "different discipline with a different authorization and liability profile "
+    "than reading a database with credentials already granted for that purpose."
 )
 
 CATEGORY = CategoryModule(
@@ -47,6 +53,6 @@ CATEGORY = CategoryModule(
     out_of_scope_only=True,
     out_of_scope=[
         _COMPLIANCE_AND_DATA_PRIVACY_NOTE,
-        _NETWORK_AND_INFRASTRUCTURE_SECURITY_NOTE,
+        _NETWORK_AND_AUTHENTICATION_TESTING_NOTE,
     ],
 )
