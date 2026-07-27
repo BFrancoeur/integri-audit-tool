@@ -7,7 +7,7 @@ import importlib
 from integri_audit_tool.models import Severity
 
 checks = importlib.import_module(
-    "integri_audit_tool.categories.04_full_text_and_structured_search_behavior.checks"
+    "integri_audit_tool.categories.full_text_and_structured_search_behavior.checks"
 )
 
 

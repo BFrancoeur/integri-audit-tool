@@ -48,10 +48,45 @@ def test_stamp_category_numbers_raises_when_order_lists_a_category_never_discove
         assert "ghost" in str(exc)
 
 
-def test_discover_categories_returns_all_11_sorted_by_number():
+def test_discover_categories_returns_all_13_sorted_by_number():
     found = registry.discover_categories()
     numbers = [c.number for c in found]
-    assert numbers == list(range(1, 12))
+    assert numbers == list(range(1, 14))
+
+
+def test_lot_and_certification_traceability_category_has_expected_checks_and_applicability():
+    categories = {c.slug: c for c in registry.discover_categories()}
+    lot_and_cert = categories["lot-and-certification-traceability"]
+    assert lot_and_cert.name == "Lot & Certification Traceability"
+    check_slugs = {c.slug for c in lot_and_cert.checks}
+    assert check_slugs == {
+        "lot-columns-poorly-populated",
+        "orphaned-lot-certification-links",
+        "duplicate-lot-numbers",
+        "ungoverned-certification-data",
+    }
+    assert lot_and_cert.applicability is not None
+    assert lot_and_cert.out_of_scope != []
+
+
+def test_out_of_scope_category_has_no_checks_and_is_marked_out_of_scope_only():
+    categories = {c.slug: c for c in registry.discover_categories()}
+    out_of_scope = categories["out-of-scope"]
+    assert out_of_scope.name == "Out of Scope"
+    assert out_of_scope.checks == []
+    assert out_of_scope.out_of_scope_only is True
+    assert any("Compliance" in note for note in out_of_scope.out_of_scope)
+    assert any("Network" in note for note in out_of_scope.out_of_scope)
+
+
+def test_schema_design_category_has_expected_checks_and_out_of_scope():
+    categories = {c.slug: c for c in registry.discover_categories()}
+    schema_design = categories["schema-design-and-normalization-boundaries"]
+    assert schema_design.name == "Schema Design & Normalization Boundaries"
+    check_slugs = {c.slug for c in schema_design.checks}
+    assert check_slugs == {"missing-foreign-keys", "schema-drift", "primary-key-consistency"}
+    assert any("bullet 1" in note for note in schema_design.out_of_scope)
+    assert any("bullet 3" in note for note in schema_design.out_of_scope)
 
 
 def test_indexing_strategy_category_has_expected_checks():
@@ -69,6 +104,7 @@ def test_jsonb_governance_category_has_expected_checks_and_applicability():
     check_slugs = {c.slug for c in jsonb_governance.checks}
     assert check_slugs == {"key-naming-drift", "key-type-inconsistency", "missing-validation-layer"}
     assert jsonb_governance.applicability is not None
+    assert any("bullet 5" in note for note in jsonb_governance.out_of_scope)
 
 
 def test_fulltext_search_category_has_expected_checks_and_applicability():
@@ -84,7 +120,7 @@ def test_fulltext_search_category_has_expected_checks_and_applicability():
         "safe-tsquery-parsing",
     }
     assert fulltext_search.applicability is not None
-    assert any("04.06" in note for note in fulltext_search.out_of_scope)
+    assert any("bullet 6" in note for note in fulltext_search.out_of_scope)
 
 
 def test_query_patterns_category_has_expected_checks_and_out_of_scope():
@@ -100,8 +136,8 @@ def test_query_patterns_category_has_expected_checks_and_out_of_scope():
     }
     assert query_patterns.applicability is None
     out_of_scope_text = " ".join(query_patterns.out_of_scope)
-    assert "05.02" in out_of_scope_text
-    assert "05.05" in out_of_scope_text
+    assert "bullet 2" in out_of_scope_text
+    assert "bullet 5" in out_of_scope_text
 
 
 def test_data_quality_category_has_expected_checks():
@@ -148,7 +184,7 @@ def test_security_boundaries_category_has_expected_checks_and_out_of_scope():
         "superuser-roles-without-expiration",
     }
     assert security.applicability is None
-    assert any("08.03" in note for note in security.out_of_scope)
+    assert any("bullet 3" in note for note in security.out_of_scope)
 
 
 def test_backup_recovery_category_has_all_4_checks():
@@ -177,7 +213,7 @@ def test_monitoring_category_has_expected_checks_and_out_of_scope():
         "bloated-tables-without-recent-vacuum",
     }
     assert monitoring.applicability is None
-    assert any("10.04" in note for note in monitoring.out_of_scope)
+    assert any("bullet 4" in note for note in monitoring.out_of_scope)
 
 
 def test_documentation_category_has_expected_checks_and_out_of_scope():
@@ -191,4 +227,4 @@ def test_documentation_category_has_expected_checks_and_out_of_scope():
         "jsonb-without-schema-registry",
     }
     assert documentation.applicability is None
-    assert any("11.04" in note for note in documentation.out_of_scope)
+    assert any("bullet 4" in note for note in documentation.out_of_scope)

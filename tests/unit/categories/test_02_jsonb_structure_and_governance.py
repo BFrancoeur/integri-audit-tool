@@ -6,7 +6,7 @@ import importlib
 
 from integri_audit_tool.models import Severity
 
-checks = importlib.import_module("integri_audit_tool.categories.02_jsonb_structure_and_governance.checks")
+checks = importlib.import_module("integri_audit_tool.categories.jsonb_structure_and_governance.checks")
 
 _ONE_COLUMN = [{"schema_name": "public", "table_name": "products", "column_name": "attrs"}]
 

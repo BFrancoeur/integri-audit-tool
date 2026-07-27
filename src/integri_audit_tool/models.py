@@ -1,4 +1,5 @@
-"""Data model shared by every audit category: Severity, Finding, CategoryResult, AuditReport."""
+"""Data model shared by every audit category: Severity, Finding, CheckResult,
+CategoryResult, AuditReport."""
 
 from __future__ import annotations
 
@@ -6,11 +7,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Literal
-
-CATEGORY_12_OUT_OF_SCOPE_NOTE = (
-    "Category 12: Compliance & Data Privacy — manual/legal review only "
-    "(not assessable via read-only DB connection; see rubric §12 scope note)."
-)
 
 
 class Severity(str, Enum):
@@ -50,6 +46,23 @@ class Finding:
 
 
 CategoryStatus = Literal["completed", "not_applicable", "error"]
+CheckStatus = Literal["passed", "findings", "error"]
+
+
+@dataclass(frozen=True)
+class CheckResult:
+    """The outcome of one check that actually ran — the persisted record of what
+    CliProgressReporter already shows live (a check's own ✓/✗/error line) that the
+    report itself never used to keep, only the findings a check happened to produce.
+    Backs the report's Tests Performed section: every test that ran, not just the
+    ones that turned something up."""
+
+    check_id: str
+    check_slug: str
+    description: str
+    status: CheckStatus
+    finding_count: int
+    error_message: str | None = None
 
 
 @dataclass(frozen=True)
@@ -58,6 +71,11 @@ class CategoryResult:
     category_name: str
     status: CategoryStatus
     findings: list[Finding] = field(default_factory=list)
+    check_results: list[CheckResult] = field(default_factory=list)
+    out_of_scope_notes: list[str] = field(default_factory=list)
+    """Populated only for the Out of Scope category (CategoryModule.out_of_scope_only)
+    — every category's out_of_scope bullets, collected by runner.py, rendered as this
+    category's body content instead of findings."""
     na_reason: str | None = None
 
 
@@ -66,7 +84,6 @@ class AuditReport:
     target_label: str
     generated_at: datetime
     category_results: list[CategoryResult]
-    out_of_scope: list[str] = field(default_factory=lambda: [CATEGORY_12_OUT_OF_SCOPE_NOTE])
     client_name: str | None = None
     """The client's business name, if collected (--ask-client-name). Drives the
     report title; falls back to a generic title when not set, e.g. for

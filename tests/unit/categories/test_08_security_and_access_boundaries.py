@@ -6,7 +6,7 @@ import importlib
 
 from integri_audit_tool.models import Severity
 
-checks = importlib.import_module("integri_audit_tool.categories.08_security_and_access_boundaries.checks")
+checks = importlib.import_module("integri_audit_tool.categories.security_and_access_boundaries.checks")
 
 
 def test_check_login_superuser_roles_flags_row(mocker):

@@ -10,7 +10,7 @@ import importlib
 
 import pytest
 
-queries = importlib.import_module("integri_audit_tool.categories.03_indexing_strategy.queries")
+queries = importlib.import_module("integri_audit_tool.categories.indexing_strategy.queries")
 
 pytestmark = pytest.mark.integration
 

@@ -58,7 +58,7 @@ CATEGORY = CategoryModule(
         ),
     ],
     out_of_scope=[
-        "Category 4, bullet 04.06 (are facet/filter UI options generated dynamically from governed "
+        "Full-Text & Structured Search Behavior, bullet 6 (are facet/filter UI options generated dynamically from governed "
         "attributes, or hardcoded/inconsistent with the data?) — this is frontend/UI logic, not visible "
         "to a read-only Postgres connection, and can never be assessed by this tool."
     ],

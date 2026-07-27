@@ -60,7 +60,7 @@ CATEGORY = CategoryModule(
         ),
     ],
     out_of_scope=[
-        "Category 8, bullet 08.03 (are secrets like connection strings and credentials stored outside "
+        "Security & Access Boundaries, bullet 3 (are secrets like connection strings and credentials stored outside "
         "version control and application code?) — nothing about where an application's configuration or "
         ".env files live is visible from inside the database it connects to.",
     ],

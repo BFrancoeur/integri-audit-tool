@@ -6,7 +6,7 @@ import importlib
 
 from integri_audit_tool.models import Severity
 
-checks = importlib.import_module("integri_audit_tool.categories.03_indexing_strategy.checks")
+checks = importlib.import_module("integri_audit_tool.categories.indexing_strategy.checks")
 
 
 def test_check_unused_indexes_builds_finding_from_row(mocker):

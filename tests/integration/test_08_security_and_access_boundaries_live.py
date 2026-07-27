@@ -15,7 +15,7 @@ import importlib
 
 import pytest
 
-queries = importlib.import_module("integri_audit_tool.categories.08_security_and_access_boundaries.queries")
+queries = importlib.import_module("integri_audit_tool.categories.security_and_access_boundaries.queries")
 
 pytestmark = pytest.mark.integration
 

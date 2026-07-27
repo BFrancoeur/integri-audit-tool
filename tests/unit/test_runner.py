@@ -1,6 +1,6 @@
 from integri_audit_tool import runner
 from integri_audit_tool.config import AuditConfig
-from integri_audit_tool.models import CATEGORY_12_OUT_OF_SCOPE_NOTE, Severity
+from integri_audit_tool.models import Severity
 from integri_audit_tool.registry import Check, CategoryModule
 
 
@@ -129,30 +129,94 @@ def test_run_audit_respects_category_filter(monkeypatch):
     assert [r.category_number for r in report.category_results] == [1]
 
 
-def test_run_audit_always_includes_category_12_out_of_scope_note(monkeypatch):
+def test_run_audit_omits_out_of_scope_category_when_none_discovered(monkeypatch):
+    """Fake category sets that don't model an out_of_scope_only category (most of
+    this file's tests) shouldn't need to — the runner treats it as optional."""
     monkeypatch.setattr(runner.registry, "discover_categories", lambda: [])
 
     report = runner.run_audit(conn=object(), config=_config(), target_label="test-db")
 
-    assert report.out_of_scope == [CATEGORY_12_OUT_OF_SCOPE_NOTE]
+    assert report.category_results == []
 
 
-def test_run_audit_collects_out_of_scope_notes_from_all_categories_regardless_of_filter(monkeypatch):
+def test_run_audit_always_includes_the_out_of_scope_category_regardless_of_filter(monkeypatch):
     """Out-of-scope notes are permanent tool limitations, not properties of a given run —
-    they show up the same way category 12's note always does, whether or not the category
-    that owns them was included in --category filtering.
+    the Out of Scope category always shows up with every category's out_of_scope bullets
+    collected onto it, whether or not --category/--check filtering would otherwise have
+    excluded it or the categories that own those bullets.
     """
     included = CategoryModule(slug="a", number=1, name="A", checks=[], out_of_scope=["A's bullet is UI-only."])
     excluded = CategoryModule(slug="b", number=2, name="B", checks=[], out_of_scope=["B's bullet is UI-only."])
-    monkeypatch.setattr(runner.registry, "discover_categories", lambda: [included, excluded])
+    out_of_scope = CategoryModule(
+        slug="out-of-scope", number=3, name="Out of Scope", checks=[], out_of_scope_only=True
+    )
+    monkeypatch.setattr(runner.registry, "discover_categories", lambda: [included, excluded, out_of_scope])
 
     report = runner.run_audit(conn=object(), config=_config(category_filter={1}), target_label="test-db")
 
-    assert "A's bullet is UI-only." in report.out_of_scope
-    assert "B's bullet is UI-only." in report.out_of_scope
-    assert CATEGORY_12_OUT_OF_SCOPE_NOTE in report.out_of_scope
+    oos_result = next(r for r in report.category_results if r.category_number == 3)
+    assert "A's bullet is UI-only." in oos_result.out_of_scope_notes
+    assert "B's bullet is UI-only." in oos_result.out_of_scope_notes
     # but which categories actually *run* still respects the filter
-    assert [r.category_number for r in report.category_results] == [1]
+    assert [r.category_number for r in report.category_results if r.category_number != 3] == [1]
+
+
+def test_run_audit_always_includes_the_out_of_scope_category_even_with_a_check_filter(monkeypatch, make_finding):
+    matching = CategoryModule(
+        slug="a",
+        number=1,
+        name="A",
+        checks=[Check(slug="does-a-thing", rubric_bullet=1, description="d", fn=lambda conn, cfg: [])],
+    )
+    out_of_scope = CategoryModule(
+        slug="out-of-scope",
+        number=3,
+        name="Out of Scope",
+        checks=[],
+        out_of_scope_only=True,
+        out_of_scope=["Permanent tool limitation."],
+    )
+    monkeypatch.setattr(runner.registry, "discover_categories", lambda: [matching, out_of_scope])
+
+    report = runner.run_audit(conn=object(), config=_config(check_filter={"01.01"}), target_label="test-db")
+
+    oos_result = next(r for r in report.category_results if r.category_number == 3)
+    assert oos_result.out_of_scope_notes == ["Permanent tool limitation."]
+
+
+def test_run_audit_stamps_check_results_for_passed_findings_and_error_outcomes(monkeypatch, make_finding):
+    def boom(conn, cfg):
+        raise RuntimeError("boom")
+
+    category = CategoryModule(
+        slug="fake-category",
+        number=99,
+        name="Fake Category",
+        checks=[
+            Check(slug="clean", rubric_bullet=1, description="Clean check", fn=lambda conn, cfg: []),
+            Check(
+                slug="dirty",
+                rubric_bullet=2,
+                description="Dirty check",
+                fn=lambda conn, cfg: [make_finding(check_slug="dirty"), make_finding(check_slug="dirty")],
+            ),
+            Check(slug="broken", rubric_bullet=3, description="Broken check", fn=boom),
+        ],
+    )
+    monkeypatch.setattr(runner.registry, "discover_categories", lambda: [category])
+
+    report = runner.run_audit(conn=object(), config=_config(), target_label="test-db")
+
+    check_results = {cr.check_slug: cr for cr in report.category_results[0].check_results}
+    assert check_results["clean"].status == "passed"
+    assert check_results["clean"].finding_count == 0
+    assert check_results["clean"].check_id == "99.01"
+    assert check_results["clean"].description == "Clean check"
+    assert check_results["dirty"].status == "findings"
+    assert check_results["dirty"].finding_count == 2
+    assert check_results["broken"].status == "error"
+    assert check_results["broken"].finding_count == 0
+    assert check_results["broken"].error_message == "boom"
 
 
 def test_run_audit_respects_check_filter_by_computed_display_id(monkeypatch, make_finding):

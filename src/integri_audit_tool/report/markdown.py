@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from integri_audit_tool.models import AuditReport, CategoryResult, Finding, Severity
+from integri_audit_tool.models import AuditReport, CategoryResult, CheckResult, Finding, Severity
 
 _SEVERITY_RANK = {
     Severity.CRITICAL: 0,
@@ -12,10 +12,20 @@ _SEVERITY_RANK = {
     Severity.INFORMATIONAL: 4,
 }
 
+_CHECK_RESULT_LABELS = {
+    "passed": "✓ Passed",
+    "findings": "Findings",
+    "error": "⚠ Error",
+}
+
 
 def _all_findings(report: AuditReport) -> list[Finding]:
     findings = [f for result in report.category_results for f in result.findings]
     return sorted(findings, key=lambda f: _SEVERITY_RANK[f.severity])
+
+
+def _all_check_results(report: AuditReport) -> list[CheckResult]:
+    return [cr for result in report.category_results for cr in result.check_results]
 
 
 def _render_executive_summary(report: AuditReport) -> str:
@@ -102,11 +112,40 @@ def _render_findings_summary_table(report: AuditReport) -> str:
     return "\n".join(lines)
 
 
+_TESTS_TABLE_COL_WIDTHS = {"#": 5, "Test": 75, "Result": 12, "Findings": 8}
+
+
+def _render_tests_performed(report: AuditReport) -> str:
+    check_results = _all_check_results(report)
+    header = "| " + " | ".join(_TESTS_TABLE_COL_WIDTHS) + " |"
+    separator = "|" + "|".join("-" * width for width in _TESTS_TABLE_COL_WIDTHS.values()) + "|"
+    lines = [
+        "## Tests Performed",
+        "",
+        "Every test that ran this audit and its outcome — not just the ones that found "
+        "something. Full detail for each finding is in Detailed Findings below.",
+        "",
+        header,
+        separator,
+    ]
+    if not check_results:
+        lines.append("| - | No tests ran | - | - |")
+    for cr in check_results:
+        result_label = _CHECK_RESULT_LABELS[cr.status]
+        lines.append(f"| {cr.check_id} | {cr.description} | {result_label} | {cr.finding_count} |")
+    return "\n".join(lines)
+
+
 def _render_category_detail(result: CategoryResult) -> str:
     lines = [f"### {result.category_number}. {result.category_name}", ""]
 
     if result.status == "not_applicable":
         lines.append(f"**N/A** — {result.na_reason or 'This category does not apply.'}")
+        return "\n".join(lines)
+
+    if result.out_of_scope_notes:
+        for note in result.out_of_scope_notes:
+            lines.append(f"- {note}")
         return "\n".join(lines)
 
     if not result.findings:
@@ -133,13 +172,6 @@ def _render_detailed_findings(report: AuditReport) -> str:
     for result in sorted(report.category_results, key=lambda r: r.category_number):
         lines.append(_render_category_detail(result))
         lines.append("")
-    return "\n".join(lines)
-
-
-def _render_out_of_scope(report: AuditReport) -> str:
-    lines = ["## Out of Scope / Not Assessed", ""]
-    for note in report.out_of_scope:
-        lines.append(f"- {note}")
     return "\n".join(lines)
 
 
@@ -193,9 +225,9 @@ def render(report: AuditReport) -> str:
         "",
         _render_findings_summary_table(report),
         "",
-        _render_detailed_findings(report),
-        _render_out_of_scope(report),
+        _render_tests_performed(report),
         "",
+        _render_detailed_findings(report),
         _render_remediation_phases(report),
     ]
     return "\n".join(sections)

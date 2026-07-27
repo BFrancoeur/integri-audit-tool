@@ -9,7 +9,7 @@ import psycopg
 
 from integri_audit_tool import registry
 from integri_audit_tool.config import AuditConfig
-from integri_audit_tool.models import CATEGORY_12_OUT_OF_SCOPE_NOTE, AuditReport, CategoryResult, Finding, Severity
+from integri_audit_tool.models import AuditReport, CategoryResult, CheckResult, Finding, Severity
 from integri_audit_tool.reporter import AuditReporter, NullReporter
 
 _CHECK_ID_FORMAT = "{category_number:02d}.{rubric_bullet:02d}"
@@ -36,17 +36,21 @@ def run_audit(
     reporter = reporter or NullReporter()
     all_categories = registry.discover_categories()
 
-    # Out-of-scope notes (permanent tool limitations, like category 12's
-    # compliance/privacy note or a category's UI-only bullet) are reported
-    # regardless of --category filtering — they're properties of the tool,
-    # not of a particular run, the same way category 12's note always shows
-    # even when auditing a single unrelated category.
-    out_of_scope_notes: list[str] = [CATEGORY_12_OUT_OF_SCOPE_NOTE]
+    # Out-of-scope notes (permanent tool limitations, like a category's
+    # UI-only bullet) are collected from every category regardless of
+    # --category filtering — they're properties of the tool, not of a
+    # particular run, and are always shown via the Out of Scope category
+    # below, whether or not that category's own filter would otherwise
+    # exclude it.
+    out_of_scope_notes: list[str] = []
     for category in all_categories:
         out_of_scope_notes.extend(category.out_of_scope)
 
+    out_of_scope_category = next((c for c in all_categories if c.out_of_scope_only), None)
+    runnable_categories = [c for c in all_categories if not c.out_of_scope_only]
+
     results: list[CategoryResult] = []
-    for category in all_categories:
+    for category in runnable_categories:
         if config.category_filter is not None and category.number not in config.category_filter:
             continue
 
@@ -85,6 +89,7 @@ def run_audit(
             continue
 
         findings: list[Finding] = []
+        check_results: list[CheckResult] = []
         for check in checks_to_run:
             check_id = _display_check_id(category.number, check.rubric_bullet)
             reporter.check_started(category, check)
@@ -100,6 +105,15 @@ def run_audit(
                 ]
                 findings.extend(check_findings)
                 reporter.check_succeeded(category, check, check_findings)
+                check_results.append(
+                    CheckResult(
+                        check_id=check_id,
+                        check_slug=check.slug,
+                        description=check.description,
+                        status="findings" if check_findings else "passed",
+                        finding_count=len(check_findings),
+                    )
+                )
             except Exception as exc:  # noqa: BLE001 - one bad check must not abort the run
                 reporter.check_failed(category, check, exc)
                 findings.append(
@@ -113,21 +127,42 @@ def run_audit(
                         observation=f"{check.description}\n\nThe check raised an error and was skipped: {exc}",
                     )
                 )
+                check_results.append(
+                    CheckResult(
+                        check_id=check_id,
+                        check_slug=check.slug,
+                        description=check.description,
+                        status="error",
+                        finding_count=0,
+                        error_message=str(exc),
+                    )
+                )
 
         result = CategoryResult(
             category_number=category.number,
             category_name=category.name,
             status="completed",
             findings=findings,
+            check_results=check_results,
         )
         results.append(result)
         reporter.category_completed(category, result)
+
+    if out_of_scope_category is not None:
+        reporter.category_ready(out_of_scope_category, [])
+        out_of_scope_result = CategoryResult(
+            category_number=out_of_scope_category.number,
+            category_name=out_of_scope_category.name,
+            status="completed",
+            out_of_scope_notes=out_of_scope_notes,
+        )
+        results.append(out_of_scope_result)
+        reporter.category_completed(out_of_scope_category, out_of_scope_result)
 
     report = AuditReport(
         target_label=target_label,
         generated_at=datetime.now(timezone.utc),
         category_results=results,
-        out_of_scope=out_of_scope_notes,
         client_name=client_name,
     )
     reporter.audit_completed(report)

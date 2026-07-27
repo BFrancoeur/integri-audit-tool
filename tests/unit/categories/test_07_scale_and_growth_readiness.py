@@ -6,7 +6,7 @@ import importlib
 
 from integri_audit_tool.models import Severity
 
-checks = importlib.import_module("integri_audit_tool.categories.07_scale_and_growth_readiness.checks")
+checks = importlib.import_module("integri_audit_tool.categories.scale_and_growth_readiness.checks")
 
 
 def _mock_pg_stat_statements_available(mocker, available: bool):

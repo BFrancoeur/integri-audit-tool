@@ -90,7 +90,6 @@ class _IncrementalReportWriter:
             target_label=self._target_label,
             generated_at=datetime.now(timezone.utc),
             category_results=list(self._results),
-            out_of_scope=[],
             client_name=self._client_name,
         )
         self._md_path.write_text(render(partial_report), encoding="utf-8")
@@ -331,7 +330,9 @@ def list_checks(
         if filter_set is not None and cat.number not in filter_set:
             continue
         typer.echo(f"Category {cat.number}: {cat.name}")
-        if not cat.checks:
+        if cat.out_of_scope_only:
+            typer.echo("  (declarative only — see its Out of Scope notes in the generated report)")
+        elif not cat.checks:
             typer.echo("  (no checks implemented yet)")
         for c in cat.checks:
             display_id = _display_check_id(cat.number, c.rubric_bullet)

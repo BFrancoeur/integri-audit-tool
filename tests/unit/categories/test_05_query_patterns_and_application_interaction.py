@@ -8,7 +8,7 @@ from datetime import timedelta
 from integri_audit_tool.models import Severity
 
 checks = importlib.import_module(
-    "integri_audit_tool.categories.05_query_patterns_and_application_interaction.checks"
+    "integri_audit_tool.categories.query_patterns_and_application_interaction.checks"
 )
 
 

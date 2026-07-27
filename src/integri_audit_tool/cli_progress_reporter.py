@@ -52,6 +52,8 @@ _CATEGORY_ALIASES = {
     "backup-recovery-and-change-management": "ia-backup",
     "monitoring-and-observability": "ia-mon",
     "documentation-and-institutional-knowledge": "ia-docs",
+    "lot-and-certification-traceability": "ia-lot",
+    "out-of-scope": "ia-oos",
 }
 
 

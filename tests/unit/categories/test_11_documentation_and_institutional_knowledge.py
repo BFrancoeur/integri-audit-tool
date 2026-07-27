@@ -7,7 +7,7 @@ import importlib
 from integri_audit_tool.models import Severity
 
 checks = importlib.import_module(
-    "integri_audit_tool.categories.11_documentation_and_institutional_knowledge.checks"
+    "integri_audit_tool.categories.documentation_and_institutional_knowledge.checks"
 )
 
 

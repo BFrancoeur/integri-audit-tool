@@ -17,7 +17,7 @@ import importlib
 
 import pytest
 
-queries = importlib.import_module("integri_audit_tool.categories.06_data_quality_and_integrity.queries")
+queries = importlib.import_module("integri_audit_tool.categories.data_quality_and_integrity.queries")
 
 pytestmark = pytest.mark.integration
 

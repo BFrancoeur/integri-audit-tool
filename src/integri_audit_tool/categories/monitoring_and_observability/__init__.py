@@ -56,7 +56,7 @@ CATEGORY = CategoryModule(
         ),
     ],
     out_of_scope=[
-        "Category 10, bullet 10.04 (is there visibility into query performance trends over time, or only "
+        "Monitoring & Observability, bullet 4 (is there visibility into query performance trends over time, or only "
         "point-in-time snapshots when something breaks?) — every pg_stat_* view is a cumulative snapshot "
         "since last reset, not a time series; whether an external system polls and retains these metrics "
         "as trends is entirely outside Postgres, unobservable from a read-only connection.",

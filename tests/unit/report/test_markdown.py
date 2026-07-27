@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from integri_audit_tool.models import AuditReport, CategoryResult, Severity
+from integri_audit_tool.models import AuditReport, CategoryResult, CheckResult, Severity
 from integri_audit_tool.report.markdown import render
 
 
@@ -33,11 +33,84 @@ def test_render_includes_all_required_sections(make_finding):
     assert "# Postgres Database & Search Audit Report — example.db:5432" in rendered
     assert "## Executive Summary" in rendered
     assert "## Findings Summary Table" in rendered
+    assert "## Tests Performed" in rendered
     assert "## Detailed Findings" in rendered
-    assert "## Out of Scope / Not Assessed" in rendered
     assert "## Suggested Remediation Phases" in rendered
     assert "**N/A** — No JSONB columns detected." in rendered
-    assert "Category 12: Compliance & Data Privacy" in rendered
+
+
+def test_render_out_of_scope_category_shows_its_notes_as_body_content():
+    """The Out of Scope category has no findings by design — its own out_of_scope_notes
+    render as its Detailed Findings body instead of "No findings.\""""
+    report = AuditReport(
+        target_label="example.db:5432",
+        generated_at=datetime(2026, 7, 22, tzinfo=timezone.utc),
+        category_results=[
+            CategoryResult(
+                category_number=13,
+                category_name="Out of Scope",
+                status="completed",
+                out_of_scope_notes=["Compliance & Data Privacy — manual review only.", "Network security — n/a."],
+            ),
+        ],
+    )
+
+    rendered = render(report)
+    detailed = rendered.split("## Detailed Findings")[1]
+
+    assert "### 13. Out of Scope" in detailed
+    assert "- Compliance & Data Privacy — manual review only." in detailed
+    assert "- Network security — n/a." in detailed
+    assert "No findings." not in detailed
+
+
+def test_render_tests_performed_lists_every_check_and_its_outcome():
+    report = AuditReport(
+        target_label="example.db:5432",
+        generated_at=datetime(2026, 7, 22, tzinfo=timezone.utc),
+        category_results=[
+            CategoryResult(
+                category_number=1,
+                category_name="Schema",
+                status="completed",
+                check_results=[
+                    CheckResult(
+                        check_id="01.01",
+                        check_slug="a",
+                        description="Are foreign keys present?",
+                        status="passed",
+                        finding_count=0,
+                    ),
+                    CheckResult(
+                        check_id="01.02",
+                        check_slug="b",
+                        description="Is there schema drift?",
+                        status="findings",
+                        finding_count=3,
+                    ),
+                    CheckResult(
+                        check_id="01.03",
+                        check_slug="c",
+                        description="Broken check",
+                        status="error",
+                        finding_count=0,
+                        error_message="boom",
+                    ),
+                ],
+            ),
+        ],
+    )
+
+    rendered = render(report)
+    tests_section = rendered.split("## Tests Performed")[1].split("## Detailed Findings")[0]
+
+    assert "01.01" in tests_section
+    assert "Are foreign keys present?" in tests_section
+    assert "✓ Passed" in tests_section
+    assert "Is there schema drift?" in tests_section
+    assert "Findings" in tests_section
+    assert "Broken check" in tests_section
+    assert "⚠ Error" in tests_section
 
 
 def test_render_title_uses_client_name_and_database_name_when_available():

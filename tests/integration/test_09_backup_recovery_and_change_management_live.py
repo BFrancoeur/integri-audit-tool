@@ -19,7 +19,7 @@ import importlib
 import pytest
 
 queries = importlib.import_module(
-    "integri_audit_tool.categories.09_backup_recovery_and_change_management.queries"
+    "integri_audit_tool.categories.backup_recovery_and_change_management.queries"
 )
 
 pytestmark = pytest.mark.integration

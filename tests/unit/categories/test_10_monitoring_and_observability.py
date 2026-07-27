@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 from integri_audit_tool.models import Severity
 
-checks = importlib.import_module("integri_audit_tool.categories.10_monitoring_and_observability.checks")
+checks = importlib.import_module("integri_audit_tool.categories.monitoring_and_observability.checks")
 
 _NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=timezone.utc)
 

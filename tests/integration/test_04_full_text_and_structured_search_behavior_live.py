@@ -13,7 +13,7 @@ import importlib
 import pytest
 
 queries = importlib.import_module(
-    "integri_audit_tool.categories.04_full_text_and_structured_search_behavior.queries"
+    "integri_audit_tool.categories.full_text_and_structured_search_behavior.queries"
 )
 
 pytestmark = pytest.mark.integration

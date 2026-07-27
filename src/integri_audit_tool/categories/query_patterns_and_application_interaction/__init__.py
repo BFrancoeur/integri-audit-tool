@@ -62,11 +62,11 @@ CATEGORY = CategoryModule(
         ),
     ],
     out_of_scope=[
-        "Category 5, bullet 05.02 (are queries parameterized or built via string concatenation?) — "
+        "Query Patterns & Application Interaction, bullet 2 (are queries parameterized or built via string concatenation?) — "
         "pg_stat_statements normalizes constants into placeholders from the parsed query tree regardless "
         "of whether they arrived as a bind parameter or were concatenated into the SQL text, so the two "
         "are indistinguishable from query text alone.",
-        "Category 5, bullet 05.05 (is connection pooling like PgBouncer configured, or does the app open "
+        "Query Patterns & Application Interaction, bullet 5 (is connection pooling like PgBouncer configured, or does the app open "
         "raw connections per request?) — a point-in-time connection count is too indirect a proxy to "
         "reliably tell pooled from unpooled traffic; this tool doesn't collect the connection-churn "
         "history that would actually distinguish them.",

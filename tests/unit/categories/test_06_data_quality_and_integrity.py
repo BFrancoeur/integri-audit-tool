@@ -6,7 +6,7 @@ import importlib
 
 from integri_audit_tool.models import Severity
 
-checks = importlib.import_module("integri_audit_tool.categories.06_data_quality_and_integrity.checks")
+checks = importlib.import_module("integri_audit_tool.categories.data_quality_and_integrity.checks")
 
 
 def _null_frac_row(**overrides):

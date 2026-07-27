@@ -16,7 +16,7 @@ from datetime import timedelta
 import psycopg
 import pytest
 
-queries = importlib.import_module("integri_audit_tool.categories.10_monitoring_and_observability.queries")
+queries = importlib.import_module("integri_audit_tool.categories.monitoring_and_observability.queries")
 
 pytestmark = pytest.mark.integration
 

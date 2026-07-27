@@ -16,7 +16,7 @@ import psycopg
 import pytest
 
 queries = importlib.import_module(
-    "integri_audit_tool.categories.05_query_patterns_and_application_interaction.queries"
+    "integri_audit_tool.categories.query_patterns_and_application_interaction.queries"
 )
 
 pytestmark = pytest.mark.integration

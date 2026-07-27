@@ -15,7 +15,7 @@ import importlib
 import pytest
 
 queries = importlib.import_module(
-    "integri_audit_tool.categories.11_documentation_and_institutional_knowledge.queries"
+    "integri_audit_tool.categories.documentation_and_institutional_knowledge.queries"
 )
 
 pytestmark = pytest.mark.integration

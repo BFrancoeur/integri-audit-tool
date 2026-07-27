@@ -52,7 +52,7 @@ CATEGORY = CategoryModule(
         ),
     ],
     out_of_scope=[
-        "Category 11, bullet 11.04 (is there a change log or migration history that's legible as a "
+        "Documentation & Institutional Knowledge, bullet 4 (is there a change log or migration history that's legible as a "
         "narrative, not just a list of diffs?) — assessing whether migration entries read as a coherent "
         "story vs. bare version numbers means parsing arbitrary content across a dozen different "
         "migration tools' table schemas, not something reliably doable from read-only catalog access.",

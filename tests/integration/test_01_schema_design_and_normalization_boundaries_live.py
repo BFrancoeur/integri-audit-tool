@@ -13,7 +13,7 @@ import importlib
 import pytest
 
 queries = importlib.import_module(
-    "integri_audit_tool.categories.01_schema_design_and_normalization_boundaries.queries"
+    "integri_audit_tool.categories.schema_design_and_normalization_boundaries.queries"
 )
 
 pytestmark = pytest.mark.integration

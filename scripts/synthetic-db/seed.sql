@@ -135,6 +135,42 @@ CREATE INDEX idx_orders_customer_id ON orders (customer_id);
 -- Redundant with the implicit orders_pkey index: same leading column ("id").
 CREATE INDEX idx_orders_id_extra ON orders (id);
 
+-- certification_id is FK-shaped (ends in _id, references certifications) but
+-- deliberately has no declared FOREIGN KEY constraint -> Lot & Certification
+-- Traceability's orphaned-link check (and, separately, category 1's general
+-- FK-shaped-column check flags it too, from the generic angle).
+CREATE TABLE certifications (
+    id serial PRIMARY KEY,
+    cert_number text NOT NULL
+);
+
+-- lot_number missing on ~14% of rows -> lot-columns-poorly-populated;
+-- lot_number has intentional duplicates ("L-2024-DUP" reused) with no unique
+-- constraint -> duplicate-lot-numbers; certification_id left NULL on ~12% of
+-- rows with no FK constraint enforcing the link at all -> orphaned-lot-
+-- certification-links; cert_data carries free-form JSONB with no CHECK
+-- constraint or trigger -> ungoverned-certification-data.
+CREATE TABLE production_lots (
+    id serial PRIMARY KEY,
+    lot_number text,
+    certification_id int,
+    cert_data jsonb
+);
+
+INSERT INTO certifications (cert_number)
+SELECT 'MTC-' || g FROM generate_series(1, 40) g;
+
+INSERT INTO production_lots (lot_number, certification_id, cert_data)
+SELECT
+    CASE
+        WHEN g % 7 = 0 THEN NULL
+        WHEN g % 11 = 0 THEN 'L-2024-DUP'
+        ELSE 'L-2024-' || lpad(g::text, 4, '0')
+    END,
+    CASE WHEN g % 8 = 0 THEN NULL ELSE (g % 40) + 1 END,
+    jsonb_build_object('issued_by', 'Acme Mill', 'grade', CASE WHEN g % 3 = 0 THEN 'A' ELSE 'B' END)
+FROM generate_series(1, 120) g;
+
 -- Refreshes planner statistics (pg_stats, pg_stat_user_tables) that several
 -- category 6/7/10 checks depend on.
 ANALYZE;

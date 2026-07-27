@@ -71,25 +71,33 @@ class CategoryModule:
     out_of_scope: list[str] = field(default_factory=list)
     """Rubric bullets this category can never assess via a read-only DB connection —
     e.g. UI/frontend logic — as distinct from bullets that are merely not yet
-    implemented. Surfaced in the report's Out of Scope section alongside category 12."""
+    implemented. Collected into the Out of Scope category's report section
+    alongside every other category's own out_of_scope declarations."""
+    out_of_scope_only: bool = False
+    """True for exactly one category (slug "out-of-scope"): has no checks and never
+    will, and its own `out_of_scope` list *is* its entire content — runner.py always
+    includes it (regardless of --category/--check filtering) and report/markdown.py
+    renders that list as its body instead of "No findings.\""""
 
 
 # The single place business-impact ranking lives. Position (1-indexed) becomes
-# each category's displayed `number`. Currently mirrors the tool's original
-# build order unchanged — reordering by business impact is deliberately a
-# separate, later change, made trivial by this list once it happens.
+# each category's displayed `number`. Reordering categories is a one-line edit
+# to this list — the entire point of decoupling identity (slug) from display
+# position — not a codebase-wide renumbering.
 _CATEGORY_ORDER: list[str] = [
+    "security-and-access-boundaries",
+    "lot-and-certification-traceability",
+    "data-quality-and-integrity",
+    "backup-recovery-and-change-management",
     "schema-design-and-normalization-boundaries",
     "jsonb-structure-and-governance",
-    "indexing-strategy",
-    "full-text-and-structured-search-behavior",
-    "query-patterns-and-application-interaction",
-    "data-quality-and-integrity",
     "scale-and-growth-readiness",
-    "security-and-access-boundaries",
-    "backup-recovery-and-change-management",
+    "indexing-strategy",
+    "query-patterns-and-application-interaction",
+    "full-text-and-structured-search-behavior",
     "monitoring-and-observability",
     "documentation-and-institutional-knowledge",
+    "out-of-scope",
 ]
 
 

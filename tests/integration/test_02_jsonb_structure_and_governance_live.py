@@ -14,7 +14,7 @@ import importlib
 
 import pytest
 
-queries = importlib.import_module("integri_audit_tool.categories.02_jsonb_structure_and_governance.queries")
+queries = importlib.import_module("integri_audit_tool.categories.jsonb_structure_and_governance.queries")
 
 pytestmark = pytest.mark.integration
 

@@ -17,7 +17,7 @@ import importlib
 
 import pytest
 
-queries = importlib.import_module("integri_audit_tool.categories.07_scale_and_growth_readiness.queries")
+queries = importlib.import_module("integri_audit_tool.categories.scale_and_growth_readiness.queries")
 
 pytestmark = pytest.mark.integration
 
