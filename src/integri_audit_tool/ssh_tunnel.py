@@ -31,6 +31,25 @@ class SshTunnelError(RuntimeError):
     never becomes reachable within the connect timeout."""
 
 
+class _LostPortRaceError(SshTunnelError):
+    """A specific attempt's failure looks like a lost port-allocation race
+    (something else grabbed the port between _find_free_local_port() and
+    ssh binding it) -- open_tunnel retries with a freshly-allocated port
+    when it sees this, rather than a plain SshTunnelError, where retrying
+    wouldn't help (bad credentials, an unreachable host, etc.). Still a
+    real SshTunnelError as far as any caller is concerned; this is purely
+    an internal retry-vs-give-up signal."""
+
+
+_MAX_TUNNEL_ATTEMPTS = 3
+_PORT_CONFLICT_ERROR_MARKERS = ("address already in use", "cannot listen")
+
+
+def _looks_like_port_conflict(stderr: str) -> bool:
+    lowered = stderr.lower()
+    return any(marker in lowered for marker in _PORT_CONFLICT_ERROR_MARKERS)
+
+
 @dataclass(frozen=True)
 class SshTunnelConfig:
     bastion_host: str
@@ -108,13 +127,13 @@ def _port_is_open(port: int) -> bool:
         return sock.connect_ex(("127.0.0.1", port)) == 0
 
 
-@contextmanager
-def open_tunnel(config: SshTunnelConfig, connect_timeout: float = 15.0) -> Iterator[int]:
-    """Opens an SSH local port-forward (-L) as a background subprocess and
-    yields the local port it's listening on — the remote database is then
-    reachable at 127.0.0.1:<that port> for as long as the context manager
-    is open. The tunnel process is always terminated on exit, success or
-    error.
+def _attempt_open_tunnel(config: SshTunnelConfig, connect_timeout: float) -> tuple[subprocess.Popen, int]:
+    """A single allocate-a-port → spawn ssh → wait-for-ready attempt. Raises
+    _LostPortRaceError for failures that look like someone else won the
+    port between _find_free_local_port() and ssh binding it — the only
+    failure mode open_tunnel retries, since a fresh port sidesteps it. Any
+    other failure (bad credentials, unreachable host, a genuine timeout)
+    raises the plain SshTunnelError, since retrying wouldn't help.
     """
     local_port = _find_free_local_port()
     command = [
@@ -129,22 +148,71 @@ def open_tunnel(config: SshTunnelConfig, connect_timeout: float = 15.0) -> Itera
     ]
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
-    try:
-        deadline = time.monotonic() + connect_timeout
-        while time.monotonic() < deadline:
+    deadline = time.monotonic() + connect_timeout
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            _, stderr = process.communicate()
+            message = (
+                "SSH tunnel process exited before the forward was ready "
+                f"(exit code {process.returncode}). ssh's error:\n"
+                f"{stderr.strip() if stderr else '(no stderr captured)'}"
+            )
+            if _looks_like_port_conflict(stderr or ""):
+                raise _LostPortRaceError(message)
+            raise SshTunnelError(message)
+        if _port_is_open(local_port):
             if process.poll() is not None:
+                # The port looked ready, but ssh had already exited by the
+                # time we checked — _port_is_open only proves *something*
+                # is listening, not that it's ours. Treat it as a lost race
+                # rather than trusting a listener we can't attribute.
                 _, stderr = process.communicate()
-                raise SshTunnelError(
-                    "SSH tunnel process exited before the forward was ready "
-                    f"(exit code {process.returncode}). ssh's error:\n"
+                raise _LostPortRaceError(
+                    "The SSH tunnel process exited immediately after its forward appeared ready "
+                    f"(exit code {process.returncode}) — the listener on port {local_port} likely "
+                    "belongs to a different process that won the port-allocation race. ssh's error:\n"
                     f"{stderr.strip() if stderr else '(no stderr captured)'}"
                 )
-            if _port_is_open(local_port):
-                break
-            time.sleep(0.2)
-        else:
-            raise SshTunnelError(f"Timed out after {connect_timeout}s waiting for the SSH tunnel to become ready.")
+            return process, local_port
+        time.sleep(0.2)
 
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+    raise SshTunnelError(f"Timed out after {connect_timeout}s waiting for the SSH tunnel to become ready.")
+
+
+@contextmanager
+def open_tunnel(config: SshTunnelConfig, connect_timeout: float = 15.0) -> Iterator[int]:
+    """Opens an SSH local port-forward (-L) as a background subprocess and
+    yields the local port it's listening on — the remote database is then
+    reachable at 127.0.0.1:<that port> for as long as the context manager
+    is open. The tunnel process is always terminated on exit, success or
+    error.
+
+    Allocating a free local port and having ssh bind that same port are two
+    separate steps with an unavoidable gap between them — another process
+    can claim the port in that window, and a readiness check that only
+    confirms *something* is listening can't by itself prove it's ssh's
+    listener. Neither gap is eliminated outright (no atomic "reserve this
+    port for ssh" primitive exists); instead, a lost race is detected (ssh
+    exits with a port-bind error, or has already exited by the time its
+    forward looks ready) and retried with a freshly-allocated port, up to
+    _MAX_TUNNEL_ATTEMPTS times.
+    """
+    process: subprocess.Popen | None = None
+    local_port: int | None = None
+    for attempt in range(1, _MAX_TUNNEL_ATTEMPTS + 1):
+        try:
+            process, local_port = _attempt_open_tunnel(config, connect_timeout)
+            break
+        except _LostPortRaceError:
+            if attempt == _MAX_TUNNEL_ATTEMPTS:
+                raise
+
+    try:
         yield local_port
     finally:
         process.terminate()
