@@ -21,6 +21,7 @@ import psycopg
 import typer
 
 from integri_audit_tool.db import connect_read_only
+from integri_audit_tool.port_input import prompt_for_port
 
 
 @dataclass(frozen=True)
@@ -41,8 +42,7 @@ def prompt_for_db_login(default_host: str, default_port: int) -> DbLoginConfig:
     host_raw = input(f"Database host [{default_host}]: ").strip()
     host = host_raw or default_host
 
-    port_raw = input(f"Database port [{default_port}]: ").strip()
-    port = int(port_raw) if port_raw else default_port
+    port = prompt_for_port("Database port", default_port)
 
     username = input("Database username: ").strip()
     if not username:

@@ -25,6 +25,8 @@ from typing import Iterator
 
 import typer
 
+from integri_audit_tool.port_input import prompt_for_port
+
 
 class SshTunnelError(RuntimeError):
     """Raised when the SSH tunnel process fails to start, exits early, or
@@ -43,6 +45,8 @@ class _LostPortRaceError(SshTunnelError):
 
 _MAX_TUNNEL_ATTEMPTS = 3
 _PORT_CONFLICT_ERROR_MARKERS = ("address already in use", "cannot listen")
+_DEFAULT_BASTION_SSH_PORT = 22
+_DEFAULT_REMOTE_DB_PORT = 5432
 
 
 def _looks_like_port_conflict(stderr: str) -> bool:
@@ -73,8 +77,7 @@ def prompt_for_ssh_tunnel_config() -> SshTunnelConfig:
         typer.echo("Bastion host cannot be empty.", err=True)
         raise typer.Exit(code=1)
 
-    bastion_port_raw = input("Bastion SSH port [22]: ").strip()
-    bastion_port = int(bastion_port_raw) if bastion_port_raw else 22
+    bastion_port = prompt_for_port("Bastion SSH port", _DEFAULT_BASTION_SSH_PORT)
 
     username = input("SSH username: ").strip()
     if not username:
@@ -99,8 +102,7 @@ def prompt_for_ssh_tunnel_config() -> SshTunnelConfig:
         typer.echo("Database host cannot be empty.", err=True)
         raise typer.Exit(code=1)
 
-    remote_port_raw = input("Database port [5432]: ").strip()
-    remote_port = int(remote_port_raw) if remote_port_raw else 5432
+    remote_port = prompt_for_port("Database port", _DEFAULT_REMOTE_DB_PORT)
 
     return SshTunnelConfig(
         bastion_host=bastion_host,
