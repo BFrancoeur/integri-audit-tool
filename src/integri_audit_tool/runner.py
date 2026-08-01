@@ -94,15 +94,22 @@ def run_audit(
             check_id = _display_check_id(category.number, check.rubric_bullet)
             reporter.check_started(category, check)
             try:
-                check_findings = [
-                    dataclasses.replace(
-                        finding,
-                        category_number=category.number,
-                        category_name=category.name,
-                        check_id=check_id,
-                    )
-                    for finding in check.fn(conn, config)
-                ]
+                # A savepoint (psycopg creates one automatically for a nested
+                # transaction() block, since run_audit's connection is always
+                # already inside an implicit outer transaction) — if this
+                # check's SQL errors, only this check's work rolls back, so
+                # the connection stays usable for every check after it. See
+                # tests/integration/test_runner_transaction_isolation_live.py.
+                with conn.transaction():
+                    check_findings = [
+                        dataclasses.replace(
+                            finding,
+                            category_number=category.number,
+                            category_name=category.name,
+                            check_id=check_id,
+                        )
+                        for finding in check.fn(conn, config)
+                    ]
                 findings.extend(check_findings)
                 reporter.check_succeeded(category, check, check_findings)
                 check_results.append(

@@ -2,9 +2,26 @@
 
 from __future__ import annotations
 
+import contextlib
+
 import pytest
 
 from integri_audit_tool.models import Finding, Severity
+
+
+class _FakeConnection:
+    """Stands in for a psycopg.Connection in tests whose check functions
+    never actually touch conn — just needs .transaction() to exist as a
+    no-op context manager, since runner.run_audit wraps every check call
+    in one (see runner.py's per-check savepoint isolation)."""
+
+    def transaction(self):
+        return contextlib.nullcontext()
+
+
+@pytest.fixture
+def fake_conn():
+    return _FakeConnection()
 
 
 @pytest.fixture

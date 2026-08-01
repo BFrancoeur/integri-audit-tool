@@ -8,25 +8,25 @@ def _config(**overrides) -> AuditConfig:
     return AuditConfig(dsn="postgresql://example", **overrides)
 
 
-def test_run_audit_passes_client_name_through_to_the_report(monkeypatch):
+def test_run_audit_passes_client_name_through_to_the_report(monkeypatch, fake_conn):
     monkeypatch.setattr(runner.registry, "discover_categories", lambda: [])
 
     report = runner.run_audit(
-        conn=object(), config=_config(), target_label="test-db", client_name="Sample Company"
+        conn=fake_conn, config=_config(), target_label="test-db", client_name="Sample Company"
     )
 
     assert report.client_name == "Sample Company"
 
 
-def test_run_audit_client_name_defaults_to_none(monkeypatch):
+def test_run_audit_client_name_defaults_to_none(monkeypatch, fake_conn):
     monkeypatch.setattr(runner.registry, "discover_categories", lambda: [])
 
-    report = runner.run_audit(conn=object(), config=_config(), target_label="test-db")
+    report = runner.run_audit(conn=fake_conn, config=_config(), target_label="test-db")
 
     assert report.client_name is None
 
 
-def test_run_audit_stamps_category_and_check_identity_onto_findings(monkeypatch, make_finding):
+def test_run_audit_stamps_category_and_check_identity_onto_findings(monkeypatch, make_finding, fake_conn):
     """A check function only ever sets check_slug -- the runner is responsible for
     stamping category_number/category_name/check_id from the category's computed
     number and the check's authored rubric_bullet, overwriting whatever the check
@@ -44,7 +44,7 @@ def test_run_audit_stamps_category_and_check_identity_onto_findings(monkeypatch,
     )
     monkeypatch.setattr(runner.registry, "discover_categories", lambda: [category])
 
-    report = runner.run_audit(conn=object(), config=_config(), target_label="test-db")
+    report = runner.run_audit(conn=fake_conn, config=_config(), target_label="test-db")
 
     stamped = report.category_results[0].findings[0]
     assert stamped.check_slug == "does-a-thing"
@@ -53,7 +53,7 @@ def test_run_audit_stamps_category_and_check_identity_onto_findings(monkeypatch,
     assert stamped.check_id == "99.01"
 
 
-def test_run_audit_computes_check_id_from_authored_rubric_bullet(monkeypatch, make_finding):
+def test_run_audit_computes_check_id_from_authored_rubric_bullet(monkeypatch, make_finding, fake_conn):
     """rubric_bullet is authored per check, not derived from list position or
     order -- a category can implement bullets out of order, or with gaps for
     not-yet-built ones, and the displayed id still reflects the real bullet."""
@@ -75,13 +75,13 @@ def test_run_audit_computes_check_id_from_authored_rubric_bullet(monkeypatch, ma
     )
     monkeypatch.setattr(runner.registry, "discover_categories", lambda: [category])
 
-    report = runner.run_audit(conn=object(), config=_config(), target_label="test-db")
+    report = runner.run_audit(conn=fake_conn, config=_config(), target_label="test-db")
 
     check_ids = [f.check_id for f in report.category_results[0].findings]
     assert check_ids == ["05.01", "05.04"]
 
 
-def test_run_audit_degrades_failing_check_to_informational_finding(monkeypatch):
+def test_run_audit_degrades_failing_check_to_informational_finding(monkeypatch, fake_conn):
     def boom(conn, cfg):
         raise RuntimeError("pg_stat_statements not installed")
 
@@ -93,7 +93,7 @@ def test_run_audit_degrades_failing_check_to_informational_finding(monkeypatch):
     )
     monkeypatch.setattr(runner.registry, "discover_categories", lambda: [category])
 
-    report = runner.run_audit(conn=object(), config=_config(), target_label="test-db")
+    report = runner.run_audit(conn=fake_conn, config=_config(), target_label="test-db")
 
     finding = report.category_results[0].findings[0]
     assert finding.severity == Severity.INFORMATIONAL
@@ -102,7 +102,7 @@ def test_run_audit_degrades_failing_check_to_informational_finding(monkeypatch):
     assert "pg_stat_statements" in finding.observation
 
 
-def test_run_audit_marks_category_not_applicable(monkeypatch):
+def test_run_audit_marks_category_not_applicable(monkeypatch, fake_conn):
     category = CategoryModule(
         slug="fake-category",
         number=99,
@@ -112,34 +112,34 @@ def test_run_audit_marks_category_not_applicable(monkeypatch):
     )
     monkeypatch.setattr(runner.registry, "discover_categories", lambda: [category])
 
-    report = runner.run_audit(conn=object(), config=_config(), target_label="test-db")
+    report = runner.run_audit(conn=fake_conn, config=_config(), target_label="test-db")
 
     result = report.category_results[0]
     assert result.status == "not_applicable"
     assert result.findings == []
 
 
-def test_run_audit_respects_category_filter(monkeypatch):
+def test_run_audit_respects_category_filter(monkeypatch, fake_conn):
     included = CategoryModule(slug="a", number=1, name="A", checks=[])
     excluded = CategoryModule(slug="b", number=2, name="B", checks=[])
     monkeypatch.setattr(runner.registry, "discover_categories", lambda: [included, excluded])
 
-    report = runner.run_audit(conn=object(), config=_config(category_filter={1}), target_label="test-db")
+    report = runner.run_audit(conn=fake_conn, config=_config(category_filter={1}), target_label="test-db")
 
     assert [r.category_number for r in report.category_results] == [1]
 
 
-def test_run_audit_omits_out_of_scope_category_when_none_discovered(monkeypatch):
+def test_run_audit_omits_out_of_scope_category_when_none_discovered(monkeypatch, fake_conn):
     """Fake category sets that don't model an out_of_scope_only category (most of
     this file's tests) shouldn't need to — the runner treats it as optional."""
     monkeypatch.setattr(runner.registry, "discover_categories", lambda: [])
 
-    report = runner.run_audit(conn=object(), config=_config(), target_label="test-db")
+    report = runner.run_audit(conn=fake_conn, config=_config(), target_label="test-db")
 
     assert report.category_results == []
 
 
-def test_run_audit_always_includes_the_out_of_scope_category_regardless_of_filter(monkeypatch):
+def test_run_audit_always_includes_the_out_of_scope_category_regardless_of_filter(monkeypatch, fake_conn):
     """Out-of-scope notes are permanent tool limitations, not properties of a given run —
     the Out of Scope category always shows up with every category's out_of_scope bullets
     collected onto it, whether or not --category/--check filtering would otherwise have
@@ -152,7 +152,7 @@ def test_run_audit_always_includes_the_out_of_scope_category_regardless_of_filte
     )
     monkeypatch.setattr(runner.registry, "discover_categories", lambda: [included, excluded, out_of_scope])
 
-    report = runner.run_audit(conn=object(), config=_config(category_filter={1}), target_label="test-db")
+    report = runner.run_audit(conn=fake_conn, config=_config(category_filter={1}), target_label="test-db")
 
     oos_result = next(r for r in report.category_results if r.category_number == 3)
     assert "A's bullet is UI-only." in oos_result.out_of_scope_notes
@@ -161,7 +161,9 @@ def test_run_audit_always_includes_the_out_of_scope_category_regardless_of_filte
     assert [r.category_number for r in report.category_results if r.category_number != 3] == [1]
 
 
-def test_run_audit_always_includes_the_out_of_scope_category_even_with_a_check_filter(monkeypatch, make_finding):
+def test_run_audit_always_includes_the_out_of_scope_category_even_with_a_check_filter(
+    monkeypatch, make_finding, fake_conn
+):
     matching = CategoryModule(
         slug="a",
         number=1,
@@ -178,13 +180,13 @@ def test_run_audit_always_includes_the_out_of_scope_category_even_with_a_check_f
     )
     monkeypatch.setattr(runner.registry, "discover_categories", lambda: [matching, out_of_scope])
 
-    report = runner.run_audit(conn=object(), config=_config(check_filter={"01.01"}), target_label="test-db")
+    report = runner.run_audit(conn=fake_conn, config=_config(check_filter={"01.01"}), target_label="test-db")
 
     oos_result = next(r for r in report.category_results if r.category_number == 3)
     assert oos_result.out_of_scope_notes == ["Permanent tool limitation."]
 
 
-def test_run_audit_stamps_check_results_for_passed_findings_and_error_outcomes(monkeypatch, make_finding):
+def test_run_audit_stamps_check_results_for_passed_findings_and_error_outcomes(monkeypatch, make_finding, fake_conn):
     def boom(conn, cfg):
         raise RuntimeError("boom")
 
@@ -205,7 +207,7 @@ def test_run_audit_stamps_check_results_for_passed_findings_and_error_outcomes(m
     )
     monkeypatch.setattr(runner.registry, "discover_categories", lambda: [category])
 
-    report = runner.run_audit(conn=object(), config=_config(), target_label="test-db")
+    report = runner.run_audit(conn=fake_conn, config=_config(), target_label="test-db")
 
     check_results = {cr.check_slug: cr for cr in report.category_results[0].check_results}
     assert check_results["clean"].status == "passed"
@@ -219,7 +221,7 @@ def test_run_audit_stamps_check_results_for_passed_findings_and_error_outcomes(m
     assert check_results["broken"].error_message == "boom"
 
 
-def test_run_audit_respects_check_filter_by_computed_display_id(monkeypatch, make_finding):
+def test_run_audit_respects_check_filter_by_computed_display_id(monkeypatch, make_finding, fake_conn):
     category = CategoryModule(
         slug="fake-category",
         number=99,
@@ -241,12 +243,12 @@ def test_run_audit_respects_check_filter_by_computed_display_id(monkeypatch, mak
     )
     monkeypatch.setattr(runner.registry, "discover_categories", lambda: [category])
 
-    report = runner.run_audit(conn=object(), config=_config(check_filter={"99.01"}), target_label="test-db")
+    report = runner.run_audit(conn=fake_conn, config=_config(check_filter={"99.01"}), target_label="test-db")
 
     assert [f.check_slug for f in report.category_results[0].findings] == ["included"]
 
 
-def test_run_audit_respects_check_filter_by_stable_slug(monkeypatch, make_finding):
+def test_run_audit_respects_check_filter_by_stable_slug(monkeypatch, make_finding, fake_conn):
     """The same filter also has to work by a check's stable slug, not just its
     currently-displayed id — muscle memory (-k 01.04) and the stable form
     (-k missing-foreign-keys) both need to keep working."""
@@ -271,7 +273,7 @@ def test_run_audit_respects_check_filter_by_stable_slug(monkeypatch, make_findin
     )
     monkeypatch.setattr(runner.registry, "discover_categories", lambda: [category])
 
-    report = runner.run_audit(conn=object(), config=_config(check_filter={"included"}), target_label="test-db")
+    report = runner.run_audit(conn=fake_conn, config=_config(check_filter={"included"}), target_label="test-db")
 
     assert [f.check_slug for f in report.category_results[0].findings] == ["included"]
 
@@ -302,7 +304,7 @@ class _RecordingReporter:
         self.events.append(("audit_completed",))
 
 
-def test_run_audit_calls_reporter_hooks_in_order(monkeypatch, make_finding):
+def test_run_audit_calls_reporter_hooks_in_order(monkeypatch, make_finding, fake_conn):
     def boom(conn, cfg):
         raise RuntimeError("nope")
 
@@ -323,7 +325,7 @@ def test_run_audit_calls_reporter_hooks_in_order(monkeypatch, make_finding):
     monkeypatch.setattr(runner.registry, "discover_categories", lambda: [category])
     reporter = _RecordingReporter()
 
-    runner.run_audit(conn=object(), config=_config(), target_label="test-db", reporter=reporter)
+    runner.run_audit(conn=fake_conn, config=_config(), target_label="test-db", reporter=reporter)
 
     assert reporter.events == [
         ("category_ready", 99, ["ok-check", "bad-check"]),
@@ -336,14 +338,14 @@ def test_run_audit_calls_reporter_hooks_in_order(monkeypatch, make_finding):
     ]
 
 
-def test_run_audit_calls_reporter_category_not_applicable(monkeypatch):
+def test_run_audit_calls_reporter_category_not_applicable(monkeypatch, fake_conn):
     category = CategoryModule(
         slug="fake-category", number=99, name="Fake Category", checks=[], applicability=lambda conn: False
     )
     monkeypatch.setattr(runner.registry, "discover_categories", lambda: [category])
     reporter = _RecordingReporter()
 
-    runner.run_audit(conn=object(), config=_config(), target_label="test-db", reporter=reporter)
+    runner.run_audit(conn=fake_conn, config=_config(), target_label="test-db", reporter=reporter)
 
     assert ("category_ready", 99, []) in reporter.events
     assert any(event[0] == "category_not_applicable" for event in reporter.events)
@@ -351,7 +353,7 @@ def test_run_audit_calls_reporter_category_not_applicable(monkeypatch):
     assert reporter.events[-1] == ("audit_completed",)
 
 
-def test_run_audit_does_not_announce_category_with_no_matching_checks(monkeypatch, make_finding):
+def test_run_audit_does_not_announce_category_with_no_matching_checks(monkeypatch, make_finding, fake_conn):
     """When a --check filter is active, a category with none of the requested checks
     shouldn't be announced to the reporter at all — no empty progress bar noise, and
     applicability isn't even evaluated for it."""
@@ -380,7 +382,7 @@ def test_run_audit_does_not_announce_category_with_no_matching_checks(monkeypatc
     reporter = _RecordingReporter()
 
     report = runner.run_audit(
-        conn=object(), config=_config(check_filter={"01.01"}), target_label="test-db", reporter=reporter
+        conn=fake_conn, config=_config(check_filter={"01.01"}), target_label="test-db", reporter=reporter
     )
 
     category_ready_numbers = [e[1] for e in reporter.events if e[0] == "category_ready"]
