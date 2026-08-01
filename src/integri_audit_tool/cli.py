@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import re
 import sys
@@ -10,7 +11,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator, Optional
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 import psycopg
 import typer
@@ -127,6 +128,42 @@ def _sanitize_dsn_for_label(dsn: str) -> str:
     return urlunsplit((parts.scheme, netloc, parts.path, "", ""))
 
 
+_ENCRYPTED_DSN_SSLMODES = ("verify-full", "verify-ca")
+
+
+def _is_loopback_or_private_host(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_private
+    except ValueError:
+        return False  # a hostname, not a literal IP -- can't vouch for it
+
+
+def _unencrypted_dsn_warning(dsn: str) -> str | None:
+    """Returns a warning message for a direct --dsn connection that targets
+    a non-loopback/private host without an sslmode that verifies the
+    server's identity — None when no warning is warranted. --ssh-connect
+    is the documented encrypted transport for real engagements; this only
+    guards the secondary direct-DSN path, which has no such protection
+    built in and would otherwise connect to a remote client database with
+    no encryption guarantee at all.
+    """
+    parts = urlsplit(dsn)
+    host = parts.hostname
+    if host is None or _is_loopback_or_private_host(host):
+        return None
+    sslmode = parse_qs(parts.query).get("sslmode", [None])[0]
+    if sslmode in _ENCRYPTED_DSN_SSLMODES:
+        return None
+    return (
+        f"[yellow]Warning:[/yellow] connecting directly to '{host}' without "
+        f"sslmode=verify-full — this connection may not be encrypted, or may not verify the "
+        f"server's identity. For real client engagements, prefer --ssh-connect, or add "
+        f"sslmode=verify-full to --dsn."
+    )
+
+
 def _looks_like_synthetic_db(dsn: str | None) -> bool:
     """Convenience auto-tag for analytics.py's is_synthetic flag: matches
     the one fixed local synthetic-db setup (scripts/setup-synthetic-db.sh,
@@ -220,6 +257,9 @@ def _acquire_connection(
     if not dsn:
         typer.echo("Either --dsn (or $INTEGRI_DSN) or --ssh-connect is required.", err=True)
         raise typer.Exit(code=1)
+    warning = _unencrypted_dsn_warning(dsn)
+    if warning:
+        console.print(warning)
     with connect_read_only(dsn) as conn:
         yield conn, _sanitize_dsn_for_label(dsn)
 

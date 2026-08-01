@@ -17,6 +17,7 @@ from integri_audit_tool.cli import (
     _looks_like_synthetic_db,
     _prompt_for_client_report_path,
     _slugify,
+    _unencrypted_dsn_warning,
     _write_text_atomically,
 )
 from integri_audit_tool.models import CategoryResult, Finding, Severity
@@ -144,6 +145,39 @@ def test_analytics_disclosure_message_names_what_gets_stored(tmp_path):
     assert "client name" in message
     assert "observation/evidence" in message
     assert str((tmp_path / "analytics.db").resolve()) in message
+
+
+def test_unencrypted_dsn_warning_none_for_loopback_host():
+    assert _unencrypted_dsn_warning("postgresql://user:pass@127.0.0.1:5432/dbname") is None
+
+
+def test_unencrypted_dsn_warning_none_for_localhost_hostname():
+    assert _unencrypted_dsn_warning("postgresql://user:pass@localhost:5432/dbname") is None
+
+
+def test_unencrypted_dsn_warning_none_for_private_ip():
+    assert _unencrypted_dsn_warning("postgresql://user:pass@10.0.0.5:5432/dbname") is None
+
+
+def test_unencrypted_dsn_warning_none_when_sslmode_verify_full_present():
+    assert (
+        _unencrypted_dsn_warning("postgresql://user:pass@client-vps.example.com:5432/dbname?sslmode=verify-full")
+        is None
+    )
+
+
+def test_unencrypted_dsn_warning_present_for_remote_host_without_sslmode():
+    warning = _unencrypted_dsn_warning("postgresql://user:pass@client-vps.example.com:5432/dbname")
+
+    assert warning is not None
+    assert "client-vps.example.com" in warning
+    assert "sslmode=verify-full" in warning
+
+
+def test_unencrypted_dsn_warning_present_when_sslmode_is_weak():
+    warning = _unencrypted_dsn_warning("postgresql://user:pass@client-vps.example.com:5432/dbname?sslmode=require")
+
+    assert warning is not None
 
 
 def test_looks_like_synthetic_db_matches_the_known_local_synthetic_db():
