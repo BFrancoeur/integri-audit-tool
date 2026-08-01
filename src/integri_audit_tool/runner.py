@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import dataclasses
+import logging
+import uuid
 from datetime import datetime, timezone
 
 import psycopg
@@ -11,6 +13,8 @@ from integri_audit_tool import registry
 from integri_audit_tool.config import AuditConfig
 from integri_audit_tool.models import AuditReport, CategoryResult, CheckResult, Finding
 from integri_audit_tool.reporter import AuditReporter, NullReporter
+
+_logger = logging.getLogger(__name__)
 
 _CHECK_ID_FORMAT = "{category_number:02d}.{rubric_bullet:02d}"
 """Format for a check's displayed "NN.NN" id: its category's current display
@@ -129,6 +133,16 @@ def run_audit(
                 # were. CheckResult(status="error") below is the complete,
                 # correct record; see the Audit Completeness report
                 # section (report/markdown.py) for how it surfaces.
+                #
+                # str(exc) can carry SQL fragments, object names, or even
+                # client data (some Postgres errors echo the offending
+                # value) -- never write it into a report-facing field. Full
+                # detail goes to the diagnostic log only, correlated back
+                # to the sanitized report line by error_reference.
+                error_reference = uuid.uuid4().hex[:8]
+                _logger.error(
+                    "Check %s (%s) failed [ref: %s]: %s", check_id, check.slug, error_reference, exc, exc_info=exc
+                )
                 check_results.append(
                     CheckResult(
                         check_id=check_id,
@@ -136,7 +150,7 @@ def run_audit(
                         description=check.description,
                         status="error",
                         finding_count=0,
-                        error_message=str(exc),
+                        error_message=f"{type(exc).__name__} (ref: {error_reference}) — see the diagnostic log for details.",
                     )
                 )
 

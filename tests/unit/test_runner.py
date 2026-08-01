@@ -1,3 +1,6 @@
+import logging
+import re
+
 from integri_audit_tool import runner
 from integri_audit_tool.config import AuditConfig
 from integri_audit_tool.registry import Check, CategoryModule
@@ -102,6 +105,45 @@ def test_run_audit_does_not_record_a_finding_for_a_failing_check(monkeypatch, fa
     report = runner.run_audit(conn=fake_conn, config=_config(), target_label="test-db")
 
     assert report.category_results[0].findings == []
+
+
+def test_run_audit_sanitizes_check_error_messages_and_logs_full_detail(monkeypatch, fake_conn, caplog):
+    """A failed check's exception text can carry SQL fragments, object
+    names, or even client data (some Postgres errors echo the offending
+    value) -- none of that may land in CheckResult.error_message, since it
+    flows straight into the persisted client report. Full detail goes to
+    the diagnostic log instead, correlated to the sanitized message by a
+    stable reference code."""
+
+    def boom(conn, cfg):
+        raise RuntimeError(
+            "connection to 'postgresql://admin:hunter2@10.0.0.5/prod_orders' failed near /etc/secrets"
+        )
+
+    category = CategoryModule(
+        slug="fake-category",
+        number=99,
+        name="Fake Category",
+        checks=[Check(slug="does-a-thing", rubric_bullet=1, description="does a thing", fn=boom)],
+    )
+    monkeypatch.setattr(runner.registry, "discover_categories", lambda: [category])
+
+    with caplog.at_level(logging.ERROR):
+        report = runner.run_audit(conn=fake_conn, config=_config(), target_label="test-db")
+
+    check_result = report.category_results[0].check_results[0]
+    assert check_result.status == "error"
+    assert "hunter2" not in check_result.error_message
+    assert "/etc/secrets" not in check_result.error_message
+    assert "RuntimeError" in check_result.error_message
+
+    # Full detail lands in the diagnostic log, not just the sanitized field.
+    assert "hunter2" in caplog.text
+
+    # The same correlation reference appears in both places.
+    ref_match = re.search(r"ref: ([0-9a-f]+)", check_result.error_message)
+    assert ref_match is not None
+    assert ref_match.group(1) in caplog.text
 
 
 def test_run_audit_marks_category_not_applicable(monkeypatch, fake_conn):
@@ -220,7 +262,12 @@ def test_run_audit_stamps_check_results_for_passed_findings_and_error_outcomes(m
     assert check_results["dirty"].finding_count == 2
     assert check_results["broken"].status == "error"
     assert check_results["broken"].finding_count == 0
-    assert check_results["broken"].error_message == "boom"
+    # error_message is sanitized (no raw exception text) -- see
+    # test_run_audit_sanitizes_check_error_messages_and_logs_full_detail
+    # for the full sanitization/correlation behavior.
+    assert check_results["broken"].error_message is not None
+    assert "boom" not in check_results["broken"].error_message
+    assert "RuntimeError" in check_results["broken"].error_message
 
 
 def test_run_audit_respects_check_filter_by_computed_display_id(monkeypatch, make_finding, fake_conn):
