@@ -32,6 +32,7 @@ def test_render_includes_all_required_sections(make_finding):
 
     assert "# Postgres Database & Search Audit Report — example.db:5432" in rendered
     assert "## Executive Summary" in rendered
+    assert "## Audit Completeness" in rendered
     assert "## Findings Summary Table" in rendered
     assert "## Tests Performed" in rendered
     assert "## Detailed Findings" in rendered
@@ -111,6 +112,74 @@ def test_render_tests_performed_lists_every_check_and_its_outcome():
     assert "Findings" in tests_section
     assert "Broken check" in tests_section
     assert "⚠ Error" in tests_section
+
+
+def test_audit_completeness_reports_no_errors_when_every_check_ran(make_finding):
+    report = AuditReport(
+        target_label="example.db:5432",
+        generated_at=datetime(2026, 7, 22, tzinfo=timezone.utc),
+        category_results=[
+            CategoryResult(
+                category_number=1,
+                category_name="Schema",
+                status="completed",
+                check_results=[
+                    CheckResult(check_id="01.01", check_slug="a", description="a", status="passed", finding_count=0),
+                    CheckResult(check_id="01.02", check_slug="b", description="b", status="findings", finding_count=1),
+                ],
+            ),
+        ],
+    )
+
+    rendered = render(report)
+    completeness = rendered.split("## Audit Completeness")[1].split("## Findings Summary Table")[0]
+
+    assert "2 of 2 checks completed successfully." in completeness
+    assert "Every check that applied to this database ran successfully." in completeness
+    assert "could not be run" not in completeness
+
+
+def test_audit_completeness_flags_errored_checks_prominently():
+    report = AuditReport(
+        target_label="example.db:5432",
+        generated_at=datetime(2026, 7, 22, tzinfo=timezone.utc),
+        category_results=[
+            CategoryResult(
+                category_number=1,
+                category_name="Schema",
+                status="completed",
+                check_results=[
+                    CheckResult(check_id="01.01", check_slug="a", description="a", status="passed", finding_count=0),
+                    CheckResult(
+                        check_id="01.02",
+                        check_slug="b",
+                        description="b",
+                        status="error",
+                        finding_count=0,
+                        error_message="boom",
+                    ),
+                ],
+            ),
+        ],
+    )
+
+    rendered = render(report)
+    completeness = rendered.split("## Audit Completeness")[1].split("## Findings Summary Table")[0]
+
+    assert "1 of 2 checks completed successfully." in completeness
+    assert "1 check could not be run" in completeness
+    assert "not evidence of" in completeness
+
+
+def test_audit_completeness_handles_zero_checks_run():
+    report = AuditReport(
+        target_label="example.db:5432", generated_at=datetime(2026, 7, 22, tzinfo=timezone.utc), category_results=[]
+    )
+
+    rendered = render(report)
+    completeness = rendered.split("## Audit Completeness")[1].split("## Findings Summary Table")[0]
+
+    assert "No checks were run." in completeness
 
 
 def test_render_title_uses_client_name_and_database_name_when_available():

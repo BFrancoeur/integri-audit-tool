@@ -1,6 +1,5 @@
 from integri_audit_tool import runner
 from integri_audit_tool.config import AuditConfig
-from integri_audit_tool.models import Severity
 from integri_audit_tool.registry import Check, CategoryModule
 
 
@@ -81,7 +80,14 @@ def test_run_audit_computes_check_id_from_authored_rubric_bullet(monkeypatch, ma
     assert check_ids == ["05.01", "05.04"]
 
 
-def test_run_audit_degrades_failing_check_to_informational_finding(monkeypatch, fake_conn):
+def test_run_audit_does_not_record_a_finding_for_a_failing_check(monkeypatch, fake_conn):
+    """A failing check is a missing assessment, not a database finding --
+    it must not show up in findings at all. It's fully captured via
+    CheckResult(status="error") instead (see
+    test_run_audit_stamps_check_results_for_passed_findings_and_error_outcomes),
+    and surfaced in the report through the Audit Completeness section
+    rather than being buried as a low-severity finding."""
+
     def boom(conn, cfg):
         raise RuntimeError("pg_stat_statements not installed")
 
@@ -95,11 +101,7 @@ def test_run_audit_degrades_failing_check_to_informational_finding(monkeypatch, 
 
     report = runner.run_audit(conn=fake_conn, config=_config(), target_label="test-db")
 
-    finding = report.category_results[0].findings[0]
-    assert finding.severity == Severity.INFORMATIONAL
-    assert finding.check_slug == "does-a-thing"
-    assert finding.check_id == "99.01"
-    assert "pg_stat_statements" in finding.observation
+    assert report.category_results[0].findings == []
 
 
 def test_run_audit_marks_category_not_applicable(monkeypatch, fake_conn):

@@ -9,7 +9,7 @@ import psycopg
 
 from integri_audit_tool import registry
 from integri_audit_tool.config import AuditConfig
-from integri_audit_tool.models import AuditReport, CategoryResult, CheckResult, Finding, Severity
+from integri_audit_tool.models import AuditReport, CategoryResult, CheckResult, Finding
 from integri_audit_tool.reporter import AuditReporter, NullReporter
 
 _CHECK_ID_FORMAT = "{category_number:02d}.{rubric_bullet:02d}"
@@ -123,17 +123,12 @@ def run_audit(
                 )
             except Exception as exc:  # noqa: BLE001 - one bad check must not abort the run
                 reporter.check_failed(category, check, exc)
-                findings.append(
-                    Finding(
-                        check_slug=check.slug,
-                        category_number=category.number,
-                        category_name=category.name,
-                        check_id=check_id,
-                        title=f"Check {check_id} could not be run",
-                        severity=Severity.INFORMATIONAL,
-                        observation=f"{check.description}\n\nThe check raised an error and was skipped: {exc}",
-                    )
-                )
+                # A failed check is a missing assessment, not a database
+                # finding -- recording it as a low-severity Finding would
+                # bury "this wasn't checked" among things that actually
+                # were. CheckResult(status="error") below is the complete,
+                # correct record; see the Audit Completeness report
+                # section (report/markdown.py) for how it surfaces.
                 check_results.append(
                     CheckResult(
                         check_id=check_id,

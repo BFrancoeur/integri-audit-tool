@@ -112,6 +112,35 @@ def _render_findings_summary_table(report: AuditReport) -> str:
     return "\n".join(lines)
 
 
+def _render_audit_completeness(report: AuditReport) -> str:
+    """Derived from check_results, not findings -- an incomplete audit
+    must be visibly incomplete regardless of how severe (or absent) the
+    findings it did produce are. A missing check is evidence that an area
+    wasn't assessed, never evidence that it's low-risk."""
+    check_results = _all_check_results(report)
+    attempted = len(check_results)
+    errored = [cr for cr in check_results if cr.status == "error"]
+
+    lines = ["## Audit Completeness", ""]
+    if attempted == 0:
+        lines.append("No checks were run.")
+        return "\n".join(lines)
+
+    passed = attempted - len(errored)
+    lines.append(f"{passed} of {attempted} checks completed successfully.")
+    lines.append("")
+    if errored:
+        plural = "s" if len(errored) != 1 else ""
+        lines.append(
+            f"**{len(errored)} check{plural} could not be run** and contributed no findings for the "
+            "areas they cover — this audit is incomplete there. A missing check is not evidence of "
+            "low risk, only that it wasn't assessed. See Tests Performed below for which ones failed."
+        )
+    else:
+        lines.append("Every check that applied to this database ran successfully.")
+    return "\n".join(lines)
+
+
 _TESTS_TABLE_COL_WIDTHS = {"#": 5, "Test": 75, "Result": 12, "Findings": 8}
 
 
@@ -222,6 +251,8 @@ def render(report: AuditReport) -> str:
         f"_Generated: {report.generated_at.strftime('%B %d, %Y')}_",
         "",
         _render_executive_summary(report),
+        "",
+        _render_audit_completeness(report),
         "",
         _render_findings_summary_table(report),
         "",
