@@ -24,6 +24,7 @@ packages = ["src/integri_audit_tool"]
 dev = [
     "pytest>=8.0",
     "pytest-mock>=3.14",
+    "ruff>=0.16.1",
     "testcontainers[postgres]>=4.7",
 ]
 

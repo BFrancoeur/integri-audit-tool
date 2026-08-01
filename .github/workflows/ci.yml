@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      # Integration tests need Docker/testcontainers and are excluded by
+      # pyproject.toml's default addopts -- unit tests only here.
+      - name: Run unit tests
+        run: uv run pytest -m "not integration"
+
+      # Warn-only: the codebase has never been linted, so a hard-fail gate
+      # would block on a large pre-existing style backlog unrelated to any
+      # given change. Tightening this to a blocking check is a documented
+      # follow-up once that backlog is cleaned up separately.
+      - name: Lint (non-blocking)
+        run: uv run ruff check . || true
