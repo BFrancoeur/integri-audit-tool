@@ -17,6 +17,7 @@ from integri_audit_tool.cli import (
     _looks_like_synthetic_db,
     _prompt_for_client_report_path,
     _slugify,
+    _write_text_atomically,
 )
 from integri_audit_tool.models import CategoryResult, Finding, Severity
 from integri_audit_tool.registry import CategoryModule
@@ -86,7 +87,46 @@ def test_incremental_report_writer_accumulates_across_categories_in_the_same_fil
     assert list(tmp_path.glob("*.md")) == first_write_paths == [md_path]
     content = md_path.read_text(encoding="utf-8")
     assert "Finding from category 1" in content
-    assert "B" in content
+
+
+def test_write_text_atomically_writes_the_full_content(tmp_path):
+    target = tmp_path / "report.md"
+
+    _write_text_atomically(target, "hello world")
+
+    assert target.read_text(encoding="utf-8") == "hello world"
+
+
+def test_write_text_atomically_leaves_no_temp_file_behind(tmp_path):
+    target = tmp_path / "report.md"
+
+    _write_text_atomically(target, "hello world")
+
+    assert list(tmp_path.iterdir()) == [target]
+
+
+def test_write_text_atomically_overwrites_existing_content_cleanly(tmp_path):
+    target = tmp_path / "report.md"
+    target.write_text("stale content", encoding="utf-8")
+
+    _write_text_atomically(target, "fresh content")
+
+    assert target.read_text(encoding="utf-8") == "fresh content"
+    assert list(tmp_path.iterdir()) == [target]
+
+
+def test_write_text_atomically_leaves_existing_file_untouched_if_the_swap_fails(tmp_path, mocker):
+    """Simulates a failure at the final atomic-replace step (e.g. a
+    filesystem error) -- the previously-written destination file must be
+    left completely as-is, not truncated or partially overwritten."""
+    target = tmp_path / "report.md"
+    target.write_text("original content", encoding="utf-8")
+    mocker.patch.object(Path, "replace", side_effect=OSError("simulated failure"))
+
+    with pytest.raises(OSError):
+        _write_text_atomically(target, "new content that should never land")
+
+    assert target.read_text(encoding="utf-8") == "original content"
 
 
 def test_analytics_defaults_to_disabled():

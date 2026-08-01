@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+import tempfile
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,6 +48,25 @@ def _is_interactive_terminal(console: Console) -> bool:
     redirected" case. MSYSTEM is set by Git Bash/MSYS2 specifically (never by
     a real redirect, cron, or CI), so it's a safe fallback signal."""
     return console.is_terminal or "MSYSTEM" in os.environ
+
+
+def _write_text_atomically(path: Path, content: str) -> None:
+    """Renders to a temp file in the same directory as `path` (same
+    filesystem, so the final swap is atomic), then replaces `path` with it
+    via Path.replace(). A crash, full disk, or interruption during the
+    write lands entirely in the temp file — whatever was previously at
+    `path` is left completely untouched, never truncated or
+    partially-overwritten."""
+    directory = path.parent
+    fd, tmp_name = tempfile.mkstemp(dir=directory, prefix=f".{path.name}.", suffix=".tmp")
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        tmp_path.replace(path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
 
 
 class _IncrementalReportWriter:
@@ -92,7 +112,7 @@ class _IncrementalReportWriter:
             category_results=list(self._results),
             client_name=self._client_name,
         )
-        self._md_path.write_text(render(partial_report), encoding="utf-8")
+        _write_text_atomically(self._md_path, render(partial_report))
 
     def audit_completed(self, report) -> None:  # noqa: ANN001
         pass
@@ -321,7 +341,7 @@ def run(
         console.print(f"Findings recorded to {analytics_db.resolve()} (tagged: {tag}).")
 
     console.print("Generating report.")
-    md_path.write_text(render(report), encoding="utf-8")
+    _write_text_atomically(md_path, render(report))
     console.print(f"Report written to {md_path.resolve()}")
     console.print("Generated report complete.")
 
