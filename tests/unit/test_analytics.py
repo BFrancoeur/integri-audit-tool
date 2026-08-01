@@ -148,6 +148,70 @@ def test_category_filter_and_check_filter_are_recorded(tmp_path):
     assert runs[0]["check_filter"] == "01.04,01.05"
 
 
+def test_category_ready_creates_a_running_run_row(tmp_path):
+    """The run row must exist as soon as the run starts, before any
+    findings arrive -- otherwise a crash before the first finding leaves
+    no record at all that a run was even attempted."""
+    db_path = tmp_path / "analytics.db"
+    writer = AuditDatabaseWriter(target_label="127.0.0.1:5432/sample_company", db_path=db_path)
+
+    writer.category_ready(CategoryModule(slug="a", number=1, name="A", checks=[]), [])
+
+    runs = _query_all(db_path, "SELECT * FROM audit_runs")
+    assert len(runs) == 1
+    assert runs[0]["status"] == "running"
+    assert runs[0]["completed_at"] is None
+
+
+def test_audit_completed_marks_the_run_as_completed(tmp_path):
+    db_path = tmp_path / "analytics.db"
+    writer = AuditDatabaseWriter(target_label="127.0.0.1:5432/sample_company", db_path=db_path)
+    writer.category_ready(CategoryModule(slug="a", number=1, name="A", checks=[]), [])
+
+    writer.audit_completed(report=object())
+
+    runs = _query_all(db_path, "SELECT * FROM audit_runs")
+    assert runs[0]["status"] == "completed"
+    assert runs[0]["completed_at"] is not None
+
+
+def test_a_crashed_run_stays_running_forever(tmp_path):
+    """Simulates a crash: category_ready fires (creating the run row), but
+    audit_completed never gets called. An analytics consumer must be able
+    to tell this run never finished, rather than it looking complete."""
+    db_path = tmp_path / "analytics.db"
+    writer = AuditDatabaseWriter(target_label="127.0.0.1:5432/sample_company", db_path=db_path)
+
+    writer.category_ready(CategoryModule(slug="a", number=1, name="A", checks=[]), [])
+    # ... process "crashes" here -- audit_completed is deliberately never called.
+
+    runs = _query_all(db_path, "SELECT * FROM audit_runs")
+    assert runs[0]["status"] == "running"
+    assert runs[0]["completed_at"] is None
+
+
+def test_existing_database_without_lifecycle_columns_gets_migrated(tmp_path):
+    """A pre-existing analytics.db from before status/completed_at existed
+    has an audit_runs table without them -- CREATE TABLE IF NOT EXISTS
+    alone won't add columns to an existing table, so this must migrate in
+    place rather than erroring."""
+    db_path = tmp_path / "analytics.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "CREATE TABLE audit_runs ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, client_name TEXT, target_label TEXT NOT NULL, "
+            "database_name TEXT NOT NULL, generated_at TEXT NOT NULL, is_synthetic INTEGER NOT NULL DEFAULT 0, "
+            "category_filter TEXT, check_filter TEXT)"
+        )
+        conn.commit()
+
+    writer = AuditDatabaseWriter(target_label="127.0.0.1:5432/sample_company", db_path=db_path)
+    writer.category_ready(CategoryModule(slug="a", number=1, name="A", checks=[]), [])
+
+    runs = _query_all(db_path, "SELECT * FROM audit_runs")
+    assert runs[0]["status"] == "running"
+
+
 def test_writing_to_an_existing_database_file_does_not_error(tmp_path):
     """Schema creation (CREATE TABLE IF NOT EXISTS) must be safe to run
     repeatedly, since a fresh AuditDatabaseWriter is constructed per

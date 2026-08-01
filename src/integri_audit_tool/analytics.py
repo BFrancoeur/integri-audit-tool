@@ -32,7 +32,13 @@ if TYPE_CHECKING:
 
 DEFAULT_DB_PATH = Path("analytics.db")
 
-_SCHEMA = """
+STATUS_RUNNING = "running"
+STATUS_COMPLETED = "completed"
+
+_STATUS_COLUMN = "status"
+_COMPLETED_AT_COLUMN = "completed_at"
+
+_SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS audit_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     client_name TEXT,
@@ -41,7 +47,9 @@ CREATE TABLE IF NOT EXISTS audit_runs (
     generated_at TEXT NOT NULL,
     is_synthetic INTEGER NOT NULL DEFAULT 0,
     category_filter TEXT,
-    check_filter TEXT
+    check_filter TEXT,
+    {_STATUS_COLUMN} TEXT NOT NULL DEFAULT '{STATUS_RUNNING}',
+    {_COMPLETED_AT_COLUMN} TEXT
 );
 
 CREATE TABLE IF NOT EXISTS findings (
@@ -75,12 +83,25 @@ def _database_name_from_label(target_label: str) -> str:
     return target_label.rsplit("/", 1)[-1] if "/" in target_label else target_label
 
 
+def _ensure_run_lifecycle_columns(conn: sqlite3.Connection) -> None:
+    """audit_runs may already exist without status/completed_at, from an
+    analytics.db created by a version of this tool that predates them --
+    CREATE TABLE IF NOT EXISTS alone never adds columns to an existing
+    table, so migrate it explicitly. Safe to call every time; a no-op once
+    both columns are present."""
+    existing_columns = {row[1] for row in conn.execute("PRAGMA table_info(audit_runs)")}
+    if _STATUS_COLUMN not in existing_columns:
+        conn.execute(f"ALTER TABLE audit_runs ADD COLUMN {_STATUS_COLUMN} TEXT NOT NULL DEFAULT '{STATUS_RUNNING}'")
+    if _COMPLETED_AT_COLUMN not in existing_columns:
+        conn.execute(f"ALTER TABLE audit_runs ADD COLUMN {_COMPLETED_AT_COLUMN} TEXT")
+
+
 class AuditDatabaseWriter:
-    """Writes one audit_runs row per run and one findings row per Finding,
-    lazily — the run row is created on the first category with any
-    findings, or in audit_completed as a fallback so a fully clean audit
-    (zero findings anywhere) still leaves a record rather than vanishing
-    silently."""
+    """Writes one audit_runs row per run (created as soon as the first
+    category is ready to run, status='running') and one findings row per
+    Finding. audit_completed marks the run 'completed' -- a process that
+    crashes partway through leaves its row stuck at 'running' rather than
+    looking indistinguishable from a real completed run."""
 
     def __init__(
         self,
@@ -104,10 +125,11 @@ class AuditDatabaseWriter:
             return self._run_id
         with closing(sqlite3.connect(self._db_path)) as conn:
             conn.executescript(_SCHEMA)
+            _ensure_run_lifecycle_columns(conn)
             cursor = conn.execute(
                 "INSERT INTO audit_runs "
                 "(client_name, target_label, database_name, generated_at, is_synthetic, "
-                "category_filter, check_filter) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                f"category_filter, check_filter, {_STATUS_COLUMN}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     self._client_name,
                     self._target_label,
@@ -116,6 +138,7 @@ class AuditDatabaseWriter:
                     int(self._is_synthetic),
                     self._category_filter,
                     self._check_filter,
+                    STATUS_RUNNING,
                 ),
             )
             conn.commit()
@@ -123,7 +146,11 @@ class AuditDatabaseWriter:
         return self._run_id
 
     def category_ready(self, category, checks_to_run) -> None:  # noqa: ANN001 - matches Protocol structurally
-        pass
+        # As early as the run's lifecycle gets — before this category's (or
+        # any category's) checks execute — so a crash anywhere after this
+        # point leaves a row correctly stuck at status='running' rather
+        # than no row at all.
+        self._ensure_run_row()
 
     def category_not_applicable(self, category, reason) -> None:  # noqa: ANN001
         pass
@@ -167,4 +194,10 @@ class AuditDatabaseWriter:
             conn.commit()
 
     def audit_completed(self, report: "AuditReport") -> None:
-        self._ensure_run_row()
+        run_id = self._ensure_run_row()
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                f"UPDATE audit_runs SET {_STATUS_COLUMN} = ?, {_COMPLETED_AT_COLUMN} = ? WHERE id = ?",
+                (STATUS_COMPLETED, datetime.now(timezone.utc).isoformat(), run_id),
+            )
+            conn.commit()
