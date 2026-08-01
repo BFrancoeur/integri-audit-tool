@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ from rich.console import Console
 from integri_audit_tool import cli, db_login, ssh_tunnel
 from integri_audit_tool.cli import (
     _IncrementalReportWriter,
+    _analytics_disclosure_message,
     _is_interactive_terminal,
     _looks_like_synthetic_db,
     _prompt_for_client_report_path,
@@ -85,6 +87,23 @@ def test_incremental_report_writer_accumulates_across_categories_in_the_same_fil
     content = md_path.read_text(encoding="utf-8")
     assert "Finding from category 1" in content
     assert "B" in content
+
+
+def test_analytics_defaults_to_disabled():
+    """Analytics is opt-in: it persists database identity, client name, and
+    finding text in a plaintext SQLite file, so a real client audit should
+    never enable it by accident."""
+    param = inspect.signature(cli.run).parameters["analytics_enabled"]
+    assert param.default.default is False
+
+
+def test_analytics_disclosure_message_names_what_gets_stored(tmp_path):
+    message = _analytics_disclosure_message(tmp_path / "analytics.db")
+
+    assert "database identity" in message
+    assert "client name" in message
+    assert "observation/evidence" in message
+    assert str((tmp_path / "analytics.db").resolve()) in message
 
 
 def test_looks_like_synthetic_db_matches_the_known_local_synthetic_db():

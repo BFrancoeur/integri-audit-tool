@@ -119,6 +119,17 @@ def _looks_like_synthetic_db(dsn: str | None) -> bool:
     return dsn is not None and "127.0.0.1:55432" in dsn
 
 
+def _analytics_disclosure_message(analytics_db_path: Path) -> str:
+    """Printed whenever --analytics is passed explicitly (the option is off
+    by default) — states plainly what gets persisted, since analytics.py's
+    SQLite file is plaintext and can hold client-identifying information."""
+    return (
+        f"[yellow]Analytics enabled:[/yellow] database identity, client name (if provided), and "
+        f"every finding's observation/evidence text will be stored in plaintext at "
+        f"{analytics_db_path.resolve()}."
+    )
+
+
 def _slugify(name: str) -> str:
     """Lowercase, collapse anything that isn't a-z/0-9 into a single hyphen,
     trim leading/trailing hyphens — safe on any filesystem, still readable."""
@@ -239,9 +250,14 @@ def run(
     ),
     pdf: bool = typer.Option(True, "--pdf/--no-pdf", help="Also generate a PDF via Pandoc if available."),
     analytics_enabled: bool = typer.Option(
-        True,
+        False,
         "--analytics/--no-analytics",
-        help="Persist this run's findings to the local analytics database (analytics.db) for cross-run analysis.",
+        help=(
+            "Persist this run's findings to the local analytics database (analytics.db) for "
+            "cross-run analysis. Off by default -- this stores database identity, client name (if "
+            "provided), and every finding's observation/evidence text in a plaintext SQLite file. "
+            "Opt in only when you intend to keep that data locally."
+        ),
     ),
     synthetic: bool = typer.Option(
         False,
@@ -284,6 +300,7 @@ def run(
         if show_progress:
             reporters.append(CliProgressReporter(interactive=step))
         if analytics_enabled:
+            console.print(_analytics_disclosure_message(analytics_db))
             reporters.append(
                 analytics.AuditDatabaseWriter(
                     target_label,
