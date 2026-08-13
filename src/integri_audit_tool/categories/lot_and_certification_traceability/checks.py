@@ -33,10 +33,11 @@ _STATS_EVIDENCE_CAVEAT = (
 )
 
 
-def is_applicable(conn: psycopg.Connection) -> bool:
+def is_applicable(conn: psycopg.Connection, config: AuditConfig) -> bool:
     """N/A when the schema shows no sign of lot/heat/batch/serial tracking or
     certification data at all — per the rubric's own guidance to skip
-    sections that don't apply."""
+    sections that don't apply. config is unused here -- part of the shared
+    applicability signature (see registry.py)."""
     return queries.has_lot_or_certification_signal(conn)
 
 

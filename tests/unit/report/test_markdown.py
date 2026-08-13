@@ -299,3 +299,106 @@ def test_findings_summary_table_uses_check_id_instead_of_long_category_name(make
     assert "This exact sentence should not appear in the summary table." not in table_section
     # ...but it's still present in Detailed Findings, where full detail belongs.
     assert "This exact sentence should not appear in the summary table." in rendered
+
+
+def test_render_shows_measurement_method_when_set(make_finding):
+    finding = make_finding(measurement_method="estimated")
+    report = AuditReport(
+        target_label="example.db:5432",
+        generated_at=datetime(2026, 7, 22, tzinfo=timezone.utc),
+        category_results=[
+            CategoryResult(category_number=1, category_name="Schema", status="completed", findings=[finding])
+        ],
+    )
+
+    rendered = render(report)
+
+    assert "**Measurement method:** Estimated" in rendered
+
+
+def test_render_omits_measurement_method_when_not_set(make_finding):
+    finding = make_finding()
+    report = AuditReport(
+        target_label="example.db:5432",
+        generated_at=datetime(2026, 7, 22, tzinfo=timezone.utc),
+        category_results=[
+            CategoryResult(category_number=1, category_name="Schema", status="completed", findings=[finding])
+        ],
+    )
+
+    rendered = render(report)
+
+    assert "Measurement method" not in rendered
+
+
+def test_render_marks_findings_that_still_need_attestation(make_finding):
+    finding = make_finding(requires_attestation=True, title="Possible duplicate: Acme Corp / Acme Co")
+    report = AuditReport(
+        target_label="example.db:5432",
+        generated_at=datetime(2026, 7, 22, tzinfo=timezone.utc),
+        category_results=[
+            CategoryResult(category_number=1, category_name="Schema", status="completed", findings=[finding])
+        ],
+    )
+
+    rendered = render(report)
+
+    assert "[⚠ Requires manual attestation]" in rendered
+
+
+def test_render_does_not_mark_a_confirmed_attestation(make_finding):
+    finding = make_finding(requires_attestation=True, attestation_outcome="confirmed", attested_by="Jane Smith")
+    report = AuditReport(
+        target_label="example.db:5432",
+        generated_at=datetime(2026, 7, 22, tzinfo=timezone.utc),
+        category_results=[
+            CategoryResult(category_number=1, category_name="Schema", status="completed", findings=[finding])
+        ],
+    )
+
+    rendered = render(report)
+
+    assert "Requires manual attestation" not in rendered
+    assert "**Attested by:** Jane Smith" in rendered
+
+
+def test_render_excludes_rejected_findings_entirely(make_finding):
+    """A rejected attestation (e.g. a fuzzy-match candidate the auditor
+    dismissed) must never reach the client-facing report, in any section."""
+    rejected = make_finding(
+        check_slug="rejected-one",
+        title="Should never appear anywhere",
+        requires_attestation=True,
+        attestation_outcome="rejected",
+    )
+    kept = make_finding(check_slug="kept-one", title="Should appear")
+    report = AuditReport(
+        target_label="example.db:5432",
+        generated_at=datetime(2026, 7, 22, tzinfo=timezone.utc),
+        category_results=[
+            CategoryResult(
+                category_number=1, category_name="Schema", status="completed", findings=[rejected, kept]
+            )
+        ],
+    )
+
+    rendered = render(report)
+
+    assert "Should never appear anywhere" not in rendered
+    assert "Should appear" in rendered
+
+
+def test_render_category_with_only_rejected_findings_shows_no_findings(make_finding):
+    rejected = make_finding(requires_attestation=True, attestation_outcome="rejected")
+    report = AuditReport(
+        target_label="example.db:5432",
+        generated_at=datetime(2026, 7, 22, tzinfo=timezone.utc),
+        category_results=[
+            CategoryResult(category_number=1, category_name="Schema", status="completed", findings=[rejected])
+        ],
+    )
+
+    rendered = render(report)
+    detailed = rendered.split("## Detailed Findings")[1]
+
+    assert "No findings." in detailed

@@ -44,16 +44,18 @@ ia() {
     printf "  %-11s %s\n" "ia-sec"     "1. Security & Access Boundaries"
     printf "  %-11s %s\n" "ia-lot"     "2. Lot & Certification Traceability"
     printf "  %-11s %s\n" "ia-quality" "3. Data Quality & Integrity"
-    printf "  %-11s %s\n" "ia-backup"  "4. Backup, Recovery & Change Management"
-    printf "  %-11s %s\n" "ia-schema"  "5. Schema Design & Normalization Boundaries"
-    printf "  %-11s %s\n" "ia-jsonb"   "6. JSONB Structure & Governance"
-    printf "  %-11s %s\n" "ia-scale"   "7. Scale & Growth Readiness"
-    printf "  %-11s %s\n" "ia-index"   "8. Indexing Strategy"
-    printf "  %-11s %s\n" "ia-query"   "9. Query Patterns & Application Interaction"
-    printf "  %-11s %s\n" "ia-fts"     "10. Full-Text & Structured Search Behavior"
-    printf "  %-11s %s\n" "ia-mon"     "11. Monitoring & Observability"
-    printf "  %-11s %s\n" "ia-docs"    "12. Documentation & Institutional Knowledge"
-    printf "  %-11s %s\n" "ia-oos"     "13. Out of Scope"
+    printf "  %-11s %s\n" "ia-dedup"   "4. Semantic Duplicate Detection"
+    printf "  %-11s %s\n" "ia-backup"  "5. Backup, Recovery & Change Management"
+    printf "  %-11s %s\n" "ia-schema"  "6. Schema Design & Normalization Boundaries"
+    printf "  %-11s %s\n" "ia-jsonb"   "7. JSONB Structure & Governance"
+    printf "  %-11s %s\n" "ia-scale"   "8. Scale & Growth Readiness"
+    printf "  %-11s %s\n" "ia-storage" "9. Storage Health & Maintenance"
+    printf "  %-11s %s\n" "ia-index"   "10. Indexing Strategy"
+    printf "  %-11s %s\n" "ia-query"   "11. Query Patterns & Application Interaction"
+    printf "  %-11s %s\n" "ia-fts"     "12. Full-Text & Structured Search Behavior"
+    printf "  %-11s %s\n" "ia-mon"     "13. Monitoring & Observability"
+    printf "  %-11s %s\n" "ia-docs"    "14. Documentation & Institutional Knowledge"
+    printf "  %-11s %s\n" "ia-oos"     "15. Out of Scope"
     echo ""
     printf "  %-11s %s\n" "ia-db-up"   "Set up/reuse the synthetic test database, auto-exports INTEGRI_DSN"
     printf "  %-11s %s\n" "ia-db-down" "Tear down the synthetic test database"
@@ -64,16 +66,18 @@ _integri_audit_tool_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 alias ia-sec="$_integri_audit_tool_root/scripts/run-category.sh 1"      # Security & Access Boundaries
 alias ia-lot="$_integri_audit_tool_root/scripts/run-category.sh 2"      # Lot & Certification Traceability
 alias ia-quality="$_integri_audit_tool_root/scripts/run-category.sh 3"  # Data Quality & Integrity
-alias ia-backup="$_integri_audit_tool_root/scripts/run-category.sh 4"   # Backup, Recovery & Change Management
-alias ia-schema="$_integri_audit_tool_root/scripts/run-category.sh 5"   # Schema Design & Normalization Boundaries
-alias ia-jsonb="$_integri_audit_tool_root/scripts/run-category.sh 6"    # JSONB Structure & Governance
-alias ia-scale="$_integri_audit_tool_root/scripts/run-category.sh 7"    # Scale & Growth Readiness
-alias ia-index="$_integri_audit_tool_root/scripts/run-category.sh 8"    # Indexing Strategy
-alias ia-query="$_integri_audit_tool_root/scripts/run-category.sh 9"    # Query Patterns & Application Interaction
-alias ia-fts="$_integri_audit_tool_root/scripts/run-category.sh 10"     # Full-Text & Structured Search Behavior
-alias ia-mon="$_integri_audit_tool_root/scripts/run-category.sh 11"     # Monitoring & Observability
-alias ia-docs="$_integri_audit_tool_root/scripts/run-category.sh 12"    # Documentation & Institutional Knowledge
-alias ia-oos="$_integri_audit_tool_root/scripts/run-category.sh 13"     # Out of Scope
+alias ia-dedup="$_integri_audit_tool_root/scripts/run-category.sh 4"    # Semantic Duplicate Detection
+alias ia-backup="$_integri_audit_tool_root/scripts/run-category.sh 5"   # Backup, Recovery & Change Management
+alias ia-schema="$_integri_audit_tool_root/scripts/run-category.sh 6"   # Schema Design & Normalization Boundaries
+alias ia-jsonb="$_integri_audit_tool_root/scripts/run-category.sh 7"    # JSONB Structure & Governance
+alias ia-scale="$_integri_audit_tool_root/scripts/run-category.sh 8"    # Scale & Growth Readiness
+alias ia-storage="$_integri_audit_tool_root/scripts/run-category.sh 9"  # Storage Health & Maintenance
+alias ia-index="$_integri_audit_tool_root/scripts/run-category.sh 10"   # Indexing Strategy
+alias ia-query="$_integri_audit_tool_root/scripts/run-category.sh 11"   # Query Patterns & Application Interaction
+alias ia-fts="$_integri_audit_tool_root/scripts/run-category.sh 12"     # Full-Text & Structured Search Behavior
+alias ia-mon="$_integri_audit_tool_root/scripts/run-category.sh 13"     # Monitoring & Observability
+alias ia-docs="$_integri_audit_tool_root/scripts/run-category.sh 14"    # Documentation & Institutional Knowledge
+alias ia-oos="$_integri_audit_tool_root/scripts/run-category.sh 15"     # Out of Scope
 
 # Functions, not plain aliases: a script run as a subprocess can't export a
 # variable into the shell that called it, so setup-synthetic-db.sh prints

@@ -45,6 +45,24 @@ def check_login_superuser_roles(conn: psycopg.Connection, config: AuditConfig) -
                 ),
             )
         )
+
+    for row in queries.fetch_login_superuser_roles_without_connection_limit(conn):
+        findings.append(
+            Finding(
+                check_slug="login-superuser-roles",
+                title=f"Superuser role with no connection limit: {row['rolname']}",
+                severity=Severity.LOW,
+                observation=f"Role '{row['rolname']}' can log in as superuser with no connection limit (rolconnlimit = -1).",
+                evidence="Detected via pg_roles.rolconnlimit = -1.",
+                business_impact=(
+                    "If this credential is ever shared across services or leaked, nothing at the database "
+                    "level caps how many concurrent superuser connections it can open — amplifying both "
+                    "accidental service-account sprawl and the blast radius of a credential compromise."
+                ),
+                recommended_direction="Set a connection limit appropriate to how this role is actually used (e.g. ALTER ROLE ... CONNECTION LIMIT n).",
+            )
+        )
+
     return findings
 
 
@@ -71,6 +89,27 @@ def check_rls_enabled_without_policies(conn: psycopg.Connection, config: AuditCo
                 recommended_direction="Add the intended CREATE POLICY statements, or disable RLS if isolation is deliberately handled elsewhere.",
             )
         )
+
+    for row in queries.fetch_rls_enabled_without_force(conn):
+        findings.append(
+            Finding(
+                check_slug="rls-enabled-without-policies",
+                title=f"Row-level security policies don't apply to the table owner: {row['table_name']}",
+                severity=Severity.LOW,
+                observation=(
+                    f"{row['schema_name']}.{row['table_name']} has row-level security enabled with "
+                    "policies attached, but FORCE ROW LEVEL SECURITY is not set."
+                ),
+                evidence="Detected via pg_class.relrowsecurity AND NOT relforcerowsecurity, with matching rows in pg_policies.",
+                business_impact=(
+                    "Without FORCE, the table owner (and any role with BYPASSRLS) silently bypasses every "
+                    "policy on this table — connections using the owner role see every row regardless of "
+                    "what the policies say, which is easy to mistake for isolation actually working."
+                ),
+                recommended_direction="ALTER TABLE ... FORCE ROW LEVEL SECURITY, unless owner bypass is a deliberate, documented exception.",
+            )
+        )
+
     return findings
 
 
@@ -113,6 +152,105 @@ def check_undocumented_pii_and_ssl(conn: psycopg.Connection, config: AuditConfig
                     "that isn't otherwise fully trusted and isolated."
                 ),
                 recommended_direction="Enable SSL on the server and require it for client connections (ssl = on, plus hostssl entries in pg_hba.conf).",
+            )
+        )
+
+    for row in queries.fetch_public_grants_on_pii_tables(conn):
+        findings.append(
+            Finding(
+                check_slug="undocumented-pii-and-ssl",
+                title=f"PUBLIC grant on a likely-PII table: {row['table_name']} ({row['privilege_type']})",
+                severity=Severity.HIGH,
+                observation=(
+                    f"{row['schema_name']}.{row['table_name']} (has a PII-shaped column by name) grants "
+                    f"{row['privilege_type']} to PUBLIC — every role in the database, not a scoped set."
+                ),
+                evidence="Heuristic name match on information_schema.columns + information_schema.table_privileges (grantee = 'PUBLIC').",
+                business_impact=(
+                    "A PUBLIC grant applies to every current and future role, including ones created "
+                    "later for unrelated purposes — on a table that looks like it holds sensitive data, "
+                    "this is a broad, easy-to-miss over-exposure rather than a scoped, intentional grant."
+                ),
+                recommended_direction="Revoke the PUBLIC grant and replace it with explicit grants to the specific roles that actually need access.",
+            )
+        )
+
+    return findings
+
+
+def check_authentication_method_strength(conn: psycopg.Connection, config: AuditConfig) -> list[Finding]:
+    """Rubric 08.12 — how strong is the configured authentication (pg_hba.conf
+    methods, password hashing algorithm)? New bullet (SOP merge, 2026-08-03) --
+    doesn't map to any bullet in the original 11-bullet rubric, so it gets a
+    fresh number past the original range, the same way schema_design's
+    repeating-column-groups (01.07) and other SOP-merge checks did. Bullet 3
+    (secrets stored outside version control) stays untouched/out_of_scope --
+    that's a genuinely different question (where app config lives) from
+    authentication method strength, not the same concern under a new name.
+    """
+    findings = []
+
+    if queries.is_pg_hba_file_rules_readable(conn):
+        for row in queries.fetch_pg_hba_rules(conn):
+            if row["auth_method"] == "trust":
+                severity = Severity.CRITICAL
+            elif row["auth_method"] == "password":
+                severity = Severity.HIGH
+            else:
+                continue
+            findings.append(
+                Finding(
+                    check_slug="authentication-method-strength",
+                    title=f"Weak pg_hba.conf auth method: {row['auth_method']} (line {row['line_number']})",
+                    severity=severity,
+                    observation=(
+                        f"pg_hba.conf line {row['line_number']} allows database "
+                        f"'{row['database']}', user '{row['user_name']}' from {row['address'] or 'local'} "
+                        f"to authenticate via '{row['auth_method']}'."
+                    ),
+                    evidence="Detected via pg_hba_file_rules.",
+                    business_impact=(
+                        "'trust' allows connecting as the named user with no authentication at all — "
+                        "anyone who can reach the port is in."
+                        if row["auth_method"] == "trust"
+                        else "'password' sends credentials in clear text unless the connection is "
+                        "separately wrapped in SSL/TLS — interceptable on any untrusted network path."
+                    ),
+                    recommended_direction="Switch this rule to 'scram-sha-256' (with hostssl if the connection isn't otherwise encrypted).",
+                )
+            )
+    else:
+        findings.append(
+            Finding(
+                check_slug="authentication-method-strength",
+                title="Could not assess pg_hba.conf: insufficient privilege",
+                severity=Severity.INFORMATIONAL,
+                observation=(
+                    "pg_hba_file_rules is restricted to superuser by default, and the connection used "
+                    "for this audit doesn't have that privilege — confirmed empirically that even broad "
+                    "monitoring roles (pg_monitor, pg_read_all_settings) don't unlock it."
+                ),
+                evidence="Checked via has_table_privilege(current_user, 'pg_hba_file_rules', 'SELECT').",
+                business_impact="pg_hba.conf authentication method strength can't be assessed from this connection.",
+                recommended_direction="Re-run this check with a superuser connection, or have the client's DBA review pg_hba.conf directly.",
+            )
+        )
+
+    encryption = queries.fetch_password_encryption_setting(conn)
+    if encryption != "scram-sha-256":
+        findings.append(
+            Finding(
+                check_slug="authentication-method-strength",
+                title=f"Weak password hashing algorithm: {encryption}",
+                severity=Severity.MEDIUM,
+                observation=f"The server's password_encryption setting is '{encryption}', not 'scram-sha-256'.",
+                evidence="Checked via pg_settings.",
+                business_impact=(
+                    "SCRAM-SHA-256 (the default since Postgres 14) is meaningfully stronger than the "
+                    "legacy MD5 hashing scheme it replaced — new passwords hashed under a weaker "
+                    "algorithm inherit that algorithm's weaknesses for as long as they're in use."
+                ),
+                recommended_direction="Set password_encryption = 'scram-sha-256' and have roles reset their passwords to pick up the new hash.",
             )
         )
 

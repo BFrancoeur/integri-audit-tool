@@ -12,3 +12,4 @@ build/
 /analytics.db
 .coverage
 htmlcov/
+.test-tmp/

@@ -152,7 +152,7 @@ def test_run_audit_marks_category_not_applicable(monkeypatch, fake_conn):
         number=99,
         name="Fake Category",
         checks=[],
-        applicability=lambda conn: False,
+        applicability=lambda conn, config: False,
     )
     monkeypatch.setattr(runner.registry, "discover_categories", lambda: [category])
 
@@ -268,6 +268,120 @@ def test_run_audit_stamps_check_results_for_passed_findings_and_error_outcomes(m
     assert check_results["broken"].error_message is not None
     assert "boom" not in check_results["broken"].error_message
     assert "RuntimeError" in check_results["broken"].error_message
+
+
+def test_run_audit_never_prompts_for_a_non_interactive_check(monkeypatch, make_finding, fake_conn):
+    """Proves zero behavior change for every existing check (interactive
+    defaults to False) -- even one that happens to set requires_attestation,
+    attestation_outcome must stay untouched and prompt_attestation must never
+    be called, since config.interactive being True alone isn't enough."""
+    prompt_calls = []
+    monkeypatch.setattr(runner, "prompt_attestation", lambda *a, **k: prompt_calls.append(1) or (True, "someone"))
+    finding = make_finding(requires_attestation=True)
+    category = CategoryModule(
+        slug="fake-category",
+        number=99,
+        name="Fake Category",
+        checks=[Check(slug="quiet", rubric_bullet=1, description="Quiet check", fn=lambda conn, cfg: [finding])],
+    )
+    monkeypatch.setattr(runner.registry, "discover_categories", lambda: [category])
+
+    report = runner.run_audit(conn=fake_conn, config=_config(interactive=True), target_label="test-db")
+
+    assert prompt_calls == []
+    assert report.category_results[0].findings[0].attestation_outcome is None
+
+
+def test_run_audit_skips_attestation_prompt_when_run_is_not_interactive(monkeypatch, make_finding, fake_conn):
+    """The check opts in (interactive=True) but the run itself doesn't
+    (config.interactive defaults to False) -- must still skip prompting."""
+    prompt_calls = []
+    monkeypatch.setattr(runner, "prompt_attestation", lambda *a, **k: prompt_calls.append(1) or (True, "someone"))
+    finding = make_finding(requires_attestation=True)
+    category = CategoryModule(
+        slug="fake-category",
+        number=99,
+        name="Fake Category",
+        checks=[
+            Check(
+                slug="candidate",
+                rubric_bullet=1,
+                description="Candidate check",
+                fn=lambda conn, cfg: [finding],
+                interactive=True,
+            )
+        ],
+    )
+    monkeypatch.setattr(runner.registry, "discover_categories", lambda: [category])
+
+    report = runner.run_audit(conn=fake_conn, config=_config(), target_label="test-db")
+
+    assert prompt_calls == []
+    assert report.category_results[0].findings[0].attestation_outcome is None
+
+
+def test_run_audit_confirmed_attestation_is_stamped_onto_the_finding(monkeypatch, make_finding, fake_conn):
+    monkeypatch.setattr(runner, "prompt_attestation", lambda *a, **k: (True, "Jane Smith"))
+    finding = make_finding(requires_attestation=True)
+    category = CategoryModule(
+        slug="fake-category",
+        number=99,
+        name="Fake Category",
+        checks=[
+            Check(
+                slug="candidate",
+                rubric_bullet=1,
+                description="Candidate check",
+                fn=lambda conn, cfg: [finding],
+                interactive=True,
+                requires_authorizer_name=True,
+            )
+        ],
+    )
+    monkeypatch.setattr(runner.registry, "discover_categories", lambda: [category])
+
+    report = runner.run_audit(conn=fake_conn, config=_config(interactive=True), target_label="test-db")
+
+    stamped = report.category_results[0].findings[0]
+    assert stamped.attestation_outcome == "confirmed"
+    assert stamped.attested_by == "Jane Smith"
+    check_result = report.category_results[0].check_results[0]
+    assert check_result.status == "findings"
+    assert check_result.finding_count == 1
+
+
+def test_run_audit_rejected_attestation_is_excluded_from_check_result_but_kept_in_findings(
+    monkeypatch, make_finding, fake_conn
+):
+    """A rejected candidate (e.g. a fuzzy-match false positive) must never
+    inflate the client-facing finding count/status, but the underlying record
+    is kept in the raw findings list -- report/markdown.py is responsible for
+    filtering it out of what the client actually sees; runner.py's job is
+    only to annotate, never to silently discard data."""
+    monkeypatch.setattr(runner, "prompt_attestation", lambda *a, **k: (False, None))
+    finding = make_finding(requires_attestation=True)
+    category = CategoryModule(
+        slug="fake-category",
+        number=99,
+        name="Fake Category",
+        checks=[
+            Check(
+                slug="candidate",
+                rubric_bullet=1,
+                description="Candidate check",
+                fn=lambda conn, cfg: [finding],
+                interactive=True,
+            )
+        ],
+    )
+    monkeypatch.setattr(runner.registry, "discover_categories", lambda: [category])
+
+    report = runner.run_audit(conn=fake_conn, config=_config(interactive=True), target_label="test-db")
+
+    assert report.category_results[0].findings[0].attestation_outcome == "rejected"
+    check_result = report.category_results[0].check_results[0]
+    assert check_result.status == "passed"
+    assert check_result.finding_count == 0
 
 
 def test_run_audit_respects_check_filter_by_computed_display_id(monkeypatch, make_finding, fake_conn):
@@ -389,7 +503,7 @@ def test_run_audit_calls_reporter_hooks_in_order(monkeypatch, make_finding, fake
 
 def test_run_audit_calls_reporter_category_not_applicable(monkeypatch, fake_conn):
     category = CategoryModule(
-        slug="fake-category", number=99, name="Fake Category", checks=[], applicability=lambda conn: False
+        slug="fake-category", number=99, name="Fake Category", checks=[], applicability=lambda conn, config: False
     )
     monkeypatch.setattr(runner.registry, "discover_categories", lambda: [category])
     reporter = _RecordingReporter()
@@ -425,7 +539,7 @@ def test_run_audit_does_not_announce_category_with_no_matching_checks(monkeypatc
         number=2,
         name="Doesn't match",
         checks=[Check(slug="unrelated", rubric_bullet=1, description="unrelated", fn=lambda conn, cfg: [])],
-        applicability=lambda conn: applicability_calls.append(1) or True,
+        applicability=lambda conn, config: applicability_calls.append(1) or True,
     )
     monkeypatch.setattr(runner.registry, "discover_categories", lambda: [matching, non_matching])
     reporter = _RecordingReporter()

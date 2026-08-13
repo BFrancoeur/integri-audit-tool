@@ -17,8 +17,9 @@ from integri_audit_tool.models import Finding, Severity
 from . import queries
 
 
-def is_applicable(conn: psycopg.Connection) -> bool:
-    """Category is N/A when the schema has no tsvector columns at all (per rubric guidance)."""
+def is_applicable(conn: psycopg.Connection, config: AuditConfig) -> bool:
+    """Category is N/A when the schema has no tsvector columns at all (per rubric guidance).
+    config is unused here -- part of the shared applicability signature (see registry.py)."""
     return len(queries.fetch_tsvector_columns(conn)) > 0
 
 

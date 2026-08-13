@@ -1,19 +1,39 @@
 """Rubric category 8: Security & Access Boundaries.
 
-5 of the rubric's 11 checklist bullets are implemented, all from read-only
-catalog access (pg_roles, pg_policies, pg_settings, pg_extension) — no row
-sampling, no pg_stat_statements dependency:
-- 08.01 login roles with SUPERUSER (least-privilege violation candidates)
+6 of the rubric's 11 original checklist bullets are implemented, all from
+read-only catalog access (pg_roles, pg_policies, pg_settings, pg_extension,
+information_schema, pg_hba_file_rules) — no row sampling, no
+pg_stat_statements dependency:
+- 08.01 login roles with SUPERUSER (least-privilege violation candidates),
+  extended (SOP merge, 2026-08-03) to also flag superuser roles with no
+  connection limit set (rolconnlimit = -1) — service-account/shared-
+  credential sprawl amplification, same slug, same least-privilege theme.
 - 08.02 RLS enabled with zero policies attached (a different failure mode
   than category 7's 07.03, which covers tenant columns with RLS never
-  enabled at all — see queries.py for why these aren't the same check)
-- 08.04 PII-heuristic columns with no documentation, and server SSL not
-  enabled (both sub-checks live under one bullet, matching the rubric's own
-  "flagged, and encrypted in transit appropriately" wording)
+  enabled at all — see queries.py for why these aren't the same check),
+  extended to also flag RLS enabled *with* policies but FORCE ROW LEVEL
+  SECURITY not set — the direct complement: policies exist but silently
+  don't apply to the table owner.
+- 08.04 PII-heuristic columns with no documentation, server SSL not
+  enabled, and (extended) PUBLIC grants on PII-shaped tables — three
+  sub-checks under one bullet, matching the rubric's own "flagged, and
+  encrypted in transit appropriately" wording.
 - 08.05 no audit trail mechanism (neither pgaudit nor log_statement active)
 - 08.06 superuser roles with no VALID UNTIL expiration
+- 08.12 (new, SOP merge) authentication method strength: pg_hba.conf rules
+  allowing 'trust' or cleartext-capable 'password' auth, and
+  password_encryption not set to scram-sha-256. Doesn't map to any bullet
+  in the original 11-bullet rubric, so it gets a fresh number past that
+  range rather than overloading bullet 3's meaning — bullet 3 asks where
+  secrets/config live (still genuinely invisible to a DB connection),
+  which is a different question from how strong the configured
+  authentication is. pg_hba_file_rules access is confirmed empirically
+  (not assumed) to require actual superuser membership — granting
+  pg_read_all_settings or even pg_monitor does not unlock it — so this
+  check has a real, expected-common privilege-gap degradation path, not
+  just an extension-missing one.
 
-The remaining 6 bullets are declared via `out_of_scope`, for two different
+The remaining 5 bullets are declared via `out_of_scope`, for two different
 reasons:
 - 08.03 (secrets stored outside version control and application code):
   nothing about where an application's config or .env files live is visible
@@ -25,7 +45,9 @@ reasons:
   policy document being signed off, or a hosting provider's disk-encryption
   toggle, no matter how the tool evolves. Same shape as category 12's
   manual-confirmation bullets: the client/DBA signs off, the tool records
-  the answer, nothing here is independently tested.
+  the answer, nothing here is independently tested. (These are also
+  exactly the bullets the new attestation mechanism — see attestation.py —
+  could unlock for the first time; tracked separately, not started here.)
 
 No `applicability` — every database has roles, so this category is never N/A.
 """
@@ -67,6 +89,12 @@ CATEGORY = CategoryModule(
             rubric_bullet=6,
             description="Are elevated/temporary access grants time-boxed with automatic expiration?",
             fn=checks.check_superuser_roles_without_expiration,
+        ),
+        Check(
+            slug="authentication-method-strength",
+            rubric_bullet=12,
+            description="How strong is the configured authentication (pg_hba.conf methods, password hashing algorithm)?",
+            fn=checks.check_authentication_method_strength,
         ),
     ],
     out_of_scope=[

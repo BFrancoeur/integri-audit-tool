@@ -212,6 +212,67 @@ def test_existing_database_without_lifecycle_columns_gets_migrated(tmp_path):
     assert runs[0]["status"] == "running"
 
 
+def test_category_completed_persists_measurement_method_and_attestation_fields(tmp_path):
+    db_path = tmp_path / "analytics.db"
+    writer = AuditDatabaseWriter(target_label="127.0.0.1:5432/sample_company", db_path=db_path)
+    finding = Finding(
+        check_slug="table-bloat",
+        category_number=1,
+        category_name="Storage Health & Maintenance",
+        check_id="99.01",
+        title="Bloated table",
+        severity=Severity.HIGH,
+        observation="obs",
+        measurement_method="estimated",
+        requires_attestation=True,
+        attested_by="Jane Smith",
+        attestation_outcome="confirmed",
+    )
+
+    writer.category_completed(
+        CategoryModule(slug="a", number=1, name="A", checks=[]),
+        CategoryResult(category_number=1, category_name="A", status="completed", findings=[finding]),
+    )
+
+    findings = _query_all(db_path, "SELECT * FROM findings")
+    assert findings[0]["measurement_method"] == "estimated"
+    assert findings[0]["requires_attestation"] == 1
+    assert findings[0]["attested_by"] == "Jane Smith"
+    assert findings[0]["attestation_outcome"] == "confirmed"
+
+
+def test_existing_findings_table_without_attestation_columns_gets_migrated(tmp_path):
+    """A pre-existing analytics.db from before the attestation/measurement-
+    method fields existed has a findings table without them -- must migrate
+    in place rather than erroring on INSERT."""
+    db_path = tmp_path / "analytics.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "CREATE TABLE audit_runs ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, client_name TEXT, target_label TEXT NOT NULL, "
+            "database_name TEXT NOT NULL, generated_at TEXT NOT NULL, is_synthetic INTEGER NOT NULL DEFAULT 0, "
+            "category_filter TEXT, check_filter TEXT, status TEXT NOT NULL DEFAULT 'running', completed_at TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE findings ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, run_id INTEGER NOT NULL, category_number INTEGER NOT NULL, "
+            "category_name TEXT NOT NULL, check_id TEXT NOT NULL, check_slug TEXT NOT NULL, title TEXT NOT NULL, "
+            "severity TEXT NOT NULL, observation TEXT NOT NULL, evidence TEXT, "
+            "business_impact TEXT NOT NULL DEFAULT '', recommended_direction TEXT NOT NULL DEFAULT '')"
+        )
+        conn.commit()
+
+    writer = AuditDatabaseWriter(target_label="127.0.0.1:5432/sample_company", db_path=db_path)
+    writer.category_completed(
+        CategoryModule(slug="a", number=1, name="A", checks=[]),
+        CategoryResult(category_number=1, category_name="A", status="completed", findings=[_finding()]),
+    )
+
+    findings = _query_all(db_path, "SELECT * FROM findings")
+    assert findings[0]["measurement_method"] is None
+    assert findings[0]["requires_attestation"] == 0
+
+
 def test_writing_to_an_existing_database_file_does_not_error(tmp_path):
     """Schema creation (CREATE TABLE IF NOT EXISTS) must be safe to run
     repeatedly, since a fresh AuditDatabaseWriter is constructed per

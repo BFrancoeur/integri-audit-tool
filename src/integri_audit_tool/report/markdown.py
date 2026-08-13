@@ -19,8 +19,18 @@ _CHECK_RESULT_LABELS = {
 }
 
 
+def _visible_findings(findings: list[Finding]) -> list[Finding]:
+    """Excludes findings a human attestation step explicitly rejected (e.g. a
+    fuzzy-match duplicate candidate the auditor confirmed was a false
+    positive) -- a rejected candidate isn't a real finding and must never
+    reach the client-facing report. Mirrors runner.py's identical filter
+    (duplicated rather than imported -- report rendering has no other
+    dependency on runner.py, and this is a one-line rule)."""
+    return [f for f in findings if f.attestation_outcome != "rejected"]
+
+
 def _all_findings(report: AuditReport) -> list[Finding]:
-    findings = [f for result in report.category_results for f in result.findings]
+    findings = _visible_findings([f for result in report.category_results for f in result.findings])
     return sorted(findings, key=lambda f: _SEVERITY_RANK[f.severity])
 
 
@@ -177,12 +187,15 @@ def _render_category_detail(result: CategoryResult) -> str:
             lines.append(f"- {note}")
         return "\n".join(lines)
 
-    if not result.findings:
+    visible = _visible_findings(result.findings)
+    if not visible:
         lines.append("No findings.")
         return "\n".join(lines)
 
-    for finding in result.findings:
-        lines.append(f"#### [{finding.severity.value}] {finding.title} (`{finding.check_id}`)")
+    for finding in visible:
+        needs_attestation = finding.requires_attestation and finding.attestation_outcome is None
+        marker = "[⚠ Requires manual attestation] " if needs_attestation else ""
+        lines.append(f"#### {marker}[{finding.severity.value}] {finding.title} (`{finding.check_id}`)")
         lines.append("")
         lines.append(f"- **Observation:** {finding.observation}")
         if finding.evidence:
@@ -191,6 +204,10 @@ def _render_category_detail(result: CategoryResult) -> str:
             lines.append(f"- **Business impact:** {finding.business_impact}")
         if finding.recommended_direction:
             lines.append(f"- **Recommended direction:** {finding.recommended_direction}")
+        if finding.measurement_method:
+            lines.append(f"- **Measurement method:** {finding.measurement_method.capitalize()}")
+        if finding.attested_by:
+            lines.append(f"- **Attested by:** {finding.attested_by}")
         lines.append("")
 
     return "\n".join(lines)

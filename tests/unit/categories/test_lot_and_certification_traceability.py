@@ -14,12 +14,12 @@ checks = importlib.import_module(
 
 def test_is_applicable_true_when_signal_present(mocker):
     mocker.patch.object(checks.queries, "has_lot_or_certification_signal", return_value=True)
-    assert checks.is_applicable(conn=object()) is True
+    assert checks.is_applicable(conn=object(), config=object()) is True
 
 
 def test_is_applicable_false_when_no_signal(mocker):
     mocker.patch.object(checks.queries, "has_lot_or_certification_signal", return_value=False)
-    assert checks.is_applicable(conn=object()) is False
+    assert checks.is_applicable(conn=object(), config=object()) is False
 
 
 def test_check_lot_columns_poorly_populated_flags_above_threshold(mocker):

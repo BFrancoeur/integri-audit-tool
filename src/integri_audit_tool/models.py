@@ -43,6 +43,24 @@ class Finding:
     evidence: str | None = None
     business_impact: str = ""
     recommended_direction: str = ""
+    measurement_method: Literal["measured", "estimated"] | None = None
+    """Set only by checks that can obtain a value either via direct measurement
+    (e.g. the pgstattuple extension) or a statistical fallback heuristic when
+    that extension isn't installed -- lets a reader tell a hard number from an
+    estimate. None for checks where this distinction doesn't apply."""
+    requires_attestation: bool = False
+    """True for a finding that needs a human to confirm it before it's final
+    (a fuzzy-match duplicate candidate, a policy-level bullet no DB connection
+    can verify on its own). See attestation.py."""
+    attested_by: str | None = None
+    """Name of the person who confirmed/authorized this finding, when the
+    attestation requires a named accountable person (e.g. "who owns this
+    access-control policy") rather than just the auditor's own yes/no judgment
+    call (e.g. confirming a duplicate match)."""
+    attestation_outcome: Literal["confirmed", "rejected"] | None = None
+    """None until a human responds (or the run was non-interactive, in which
+    case it stays None and the report marks the finding as requiring manual
+    attestation)."""
 
 
 CategoryStatus = Literal["completed", "not_applicable", "error"]

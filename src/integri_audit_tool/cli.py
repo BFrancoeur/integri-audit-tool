@@ -18,6 +18,7 @@ import typer
 from rich.console import Console
 
 from integri_audit_tool import analytics, db_login, pdf_export, ssh_tunnel
+from integri_audit_tool.attestation import prompt_attestation
 from integri_audit_tool.cli_progress_reporter import CliProgressReporter
 from integri_audit_tool.config import AuditConfig
 from integri_audit_tool.db import connect_read_only
@@ -264,6 +265,61 @@ def _acquire_connection(
         yield conn, _sanitize_dsn_for_label(dsn)
 
 
+def _run_preflight(conn: psycopg.Connection, console: Console) -> None:
+    """SOP A0's pre-audit gate: a handful of confirmations before any category
+    runs, ending with a STOP CONDITION requiring explicit sign-off (and a
+    named authorizer, for traceability) before proceeding with a production
+    audit that has no replica/restore available for validation. Deliberately
+    not a Check/Finding -- this decides whether the run proceeds at all, not
+    what it records about the database, so it never touches the report
+    pipeline. Only runs when --interactive is on; a non-interactive/scripted
+    run skips straight to the audit, same as before this feature existed.
+
+    pgstattuple's installability is checked via pg_available_extensions, not
+    by attempting CREATE EXTENSION -- this connection is always read-only
+    (db.py), so actually installing it isn't an option even to test with.
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT version()")
+        version = cur.fetchone()[0]
+        console.print(f"[dim]Postgres version:[/dim] {version}")
+
+        cur.execute("SELECT 1 FROM pg_available_extensions WHERE name = 'pgstattuple'")
+        pgstattuple_available = cur.fetchone() is not None
+        note = "available to install" if pgstattuple_available else "NOT available on this server"
+        console.print(f"[dim]pgstattuple extension:[/dim] {note} — bloat figures fall back to estimation if absent.")
+
+    confirmed, _ = prompt_attestation(
+        "Confirm read access level is sufficient for this audit (a read-only role covers ~90% of checks).",
+        require_authorizer_name=False,
+        console=console,
+    )
+    if not confirmed:
+        console.print("[yellow]Read access level not confirmed — proceeding, but re-check before relying on results.[/yellow]")
+
+    has_replica, _ = prompt_attestation(
+        "Is a restore/replica available for any validation queries this audit might need?",
+        require_authorizer_name=False,
+        console=console,
+    )
+    if has_replica:
+        return
+
+    console.print(
+        "[bold yellow]STOP CONDITION:[/bold yellow] no restore/replica is available. Running catalog-only "
+        "queries against production requires explicit written sign-off before proceeding."
+    )
+    signed_off, authorizer = prompt_attestation(
+        "Has explicit written sign-off been obtained to proceed against production without a replica?",
+        require_authorizer_name=True,
+        console=console,
+    )
+    if not signed_off:
+        console.print("[bold red]Aborting:[/bold red] STOP CONDITION not cleared.")
+        raise typer.Exit(code=1)
+    console.print(f"[green]Sign-off recorded[/green] (authorized by: {authorizer or 'not named'}).")
+
+
 @app.command()
 def run(
     dsn: Optional[str] = typer.Option(
@@ -308,6 +364,20 @@ def run(
         "--step/--no-step",
         help="Pause after each category's readiness message and wait for Enter before running it. Requires the progress UI.",
     ),
+    interactive: Optional[bool] = typer.Option(
+        None,
+        "--interactive/--no-interactive",
+        help=(
+            "Prompt for human attestation on checks that need it (e.g. confirming a fuzzy-match "
+            "duplicate candidate) and run the pre-audit preflight gate. Default: auto-detect based "
+            "on whether stderr is a terminal, same as --progress."
+        ),
+    ),
+    preflight: bool = typer.Option(
+        True,
+        "--preflight/--no-preflight",
+        help="Run the pre-audit gate (version/access/replica confirmations) before the audit starts. Only prompts when --interactive is on.",
+    ),
     pdf: bool = typer.Option(True, "--pdf/--no-pdf", help="Also generate a PDF via Pandoc if available."),
     analytics_enabled: bool = typer.Option(
         False,
@@ -331,11 +401,21 @@ def run(
     analytics_db: Path = typer.Option(
         analytics.DEFAULT_DB_PATH, "--analytics-db", help="Path to the analytics SQLite database."
     ),
+    duplicate_fingerprint_config: Optional[Path] = typer.Option(
+        None,
+        "--duplicate-fingerprint-config",
+        help=(
+            "Path to a per-engagement identity-fingerprint TOML config (see "
+            "examples/duplicate_fingerprint.example.toml) enabling the Semantic Duplicate Detection "
+            "category. Omit to leave that category N/A — it never guesses business-identity fields."
+        ),
+    ),
 ) -> None:
     """Run the audit against DSN (or an SSH-tunneled connection) and write a
     Markdown (and, if possible, PDF) report."""
     console = Console(stderr=True)
     show_progress = progress if progress is not None else _is_interactive_terminal(console)
+    is_interactive = interactive if interactive is not None else _is_interactive_terminal(console)
 
     client_name: Optional[str] = None
     if output is not None:
@@ -350,10 +430,15 @@ def run(
     md_path.parent.mkdir(parents=True, exist_ok=True)
 
     with _acquire_connection(dsn, ssh_connect, console) as (conn, target_label):
+        if preflight and is_interactive:
+            _run_preflight(conn, console)
+
         config = AuditConfig(
             dsn=dsn,
             category_filter=set(category) if category else None,
             check_filter=set(check) if check else None,
+            interactive=is_interactive,
+            duplicate_fingerprint_config=duplicate_fingerprint_config,
         )
 
         reporters: list[AuditReporter] = [_IncrementalReportWriter(md_path, target_label, client_name=client_name)]

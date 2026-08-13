@@ -1,0 +1,38 @@
+# Example identity-fingerprint config for the Semantic Duplicate Detection
+# category (--duplicate-fingerprint-config). Copy and adapt per engagement --
+# this defines what makes two rows "the same real-world entity" for THIS
+# client's data, which the tool can never guess on its own.
+#
+# schema/table/id_column: where to look.
+# Each [[fields]] entry is one column that contributes to the identity
+# fingerprint, plus which normalization steps to apply before comparing.
+#
+# Valid normalize steps (see fingerprint_config.NORMALIZE_PRIMITIVES):
+#   lowercase          - fold case
+#   strip_whitespace    - remove all whitespace
+#   digits_only         - keep only 0-9 (e.g. for a dimension stored as "1/4 in")
+#   alphanumeric_only   - keep only letters and digits
+#
+# Note: these are simple string-cleanup steps only, not unit conversion --
+# "1/4 in" and "0.25in" will NOT normalize to the same value yet. See
+# fingerprint_config.py's module docstring for why that's deferred.
+
+schema = "public"
+table = "parts"
+id_column = "id"
+
+# Optional; defaults to 0.6 if omitted. Lower = more (noisier) fuzzy-match
+# candidates; higher = fewer, more conservative candidates.
+similarity_threshold = 0.6
+
+[[fields]]
+column = "material_grade"
+normalize = ["lowercase", "strip_whitespace"]
+
+[[fields]]
+column = "sku"
+normalize = ["lowercase", "strip_whitespace"]
+
+[[fields]]
+column = "diameter_in"
+normalize = ["digits_only"]

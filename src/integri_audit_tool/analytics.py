@@ -38,6 +38,17 @@ STATUS_COMPLETED = "completed"
 _STATUS_COLUMN = "status"
 _COMPLETED_AT_COLUMN = "completed_at"
 
+_FINDING_ATTESTATION_COLUMNS = (
+    "measurement_method",
+    "requires_attestation",
+    "attested_by",
+    "attestation_outcome",
+)
+"""Finding fields added for the SOP-merge attestation/measurement-method
+feature -- migrated into an existing findings table the same way
+_ensure_run_lifecycle_columns() migrates audit_runs, since CREATE TABLE IF
+NOT EXISTS never adds columns to a table that already exists."""
+
 _SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS audit_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,7 +75,11 @@ CREATE TABLE IF NOT EXISTS findings (
     observation TEXT NOT NULL,
     evidence TEXT,
     business_impact TEXT NOT NULL DEFAULT '',
-    recommended_direction TEXT NOT NULL DEFAULT ''
+    recommended_direction TEXT NOT NULL DEFAULT '',
+    measurement_method TEXT,
+    requires_attestation INTEGER NOT NULL DEFAULT 0,
+    attested_by TEXT,
+    attestation_outcome TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_findings_run_id ON findings(run_id);
@@ -94,6 +109,21 @@ def _ensure_run_lifecycle_columns(conn: sqlite3.Connection) -> None:
         conn.execute(f"ALTER TABLE audit_runs ADD COLUMN {_STATUS_COLUMN} TEXT NOT NULL DEFAULT '{STATUS_RUNNING}'")
     if _COMPLETED_AT_COLUMN not in existing_columns:
         conn.execute(f"ALTER TABLE audit_runs ADD COLUMN {_COMPLETED_AT_COLUMN} TEXT")
+
+
+def _ensure_findings_attestation_columns(conn: sqlite3.Connection) -> None:
+    """Same migration need as _ensure_run_lifecycle_columns, for findings
+    created by a version of this tool that predates the attestation/
+    measurement-method fields. Safe to call every time."""
+    existing_columns = {row[1] for row in conn.execute("PRAGMA table_info(findings)")}
+    if "measurement_method" not in existing_columns:
+        conn.execute("ALTER TABLE findings ADD COLUMN measurement_method TEXT")
+    if "requires_attestation" not in existing_columns:
+        conn.execute("ALTER TABLE findings ADD COLUMN requires_attestation INTEGER NOT NULL DEFAULT 0")
+    if "attested_by" not in existing_columns:
+        conn.execute("ALTER TABLE findings ADD COLUMN attested_by TEXT")
+    if "attestation_outcome" not in existing_columns:
+        conn.execute("ALTER TABLE findings ADD COLUMN attestation_outcome TEXT")
 
 
 class AuditDatabaseWriter:
@@ -169,11 +199,13 @@ class AuditDatabaseWriter:
             return
         run_id = self._ensure_run_row()
         with closing(sqlite3.connect(self._db_path)) as conn:
+            _ensure_findings_attestation_columns(conn)
             conn.executemany(
                 "INSERT INTO findings "
                 "(run_id, category_number, category_name, check_id, check_slug, title, severity, "
-                "observation, evidence, business_impact, recommended_direction) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "observation, evidence, business_impact, recommended_direction, measurement_method, "
+                "requires_attestation, attested_by, attestation_outcome) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 [
                     (
                         run_id,
@@ -187,6 +219,10 @@ class AuditDatabaseWriter:
                         f.evidence,
                         f.business_impact,
                         f.recommended_direction,
+                        f.measurement_method,
+                        int(f.requires_attestation),
+                        f.attested_by,
+                        f.attestation_outcome,
                     )
                     for f in result.findings
                 ],

@@ -55,6 +55,19 @@ class Check:
     computed `number` to form the displayed "NN.NN" check id."""
     description: str
     fn: CheckFn
+    interactive: bool = False
+    """True for a check that needs to pause for human input (see
+    attestation.py) after its findings are collected. runner.py runs an
+    interactive check's fn() the same as any other, but the attestation
+    prompt itself always happens after that call returns and its savepoint
+    has closed — never inside conn.transaction() — because db.py enforces a
+    60-second idle-in-transaction timeout that a human's response time could
+    easily exceed."""
+    requires_authorizer_name: bool = False
+    """True when this check's attestation prompt must also ask "who
+    authorized/owns this?" (e.g. a named policy owner) rather than a plain
+    yes/no (e.g. confirming a duplicate match is the auditor's own judgment
+    call, not someone else's sign-off). Only meaningful when interactive=True."""
 
 
 @dataclass(frozen=True)
@@ -67,7 +80,7 @@ class CategoryModule:
     number: int = _UNASSIGNED_CATEGORY_NUMBER
     """Displayed position (e.g. 1 for "Category 1"). Not set by category authors —
     computed by `discover_categories()` from `_CATEGORY_ORDER`."""
-    applicability: Callable[[psycopg.Connection], bool] | None = None
+    applicability: Callable[[psycopg.Connection, "AuditConfig"], bool] | None = None
     out_of_scope: list[str] = field(default_factory=list)
     """Rubric bullets this category can never assess via a read-only DB connection —
     e.g. UI/frontend logic — as distinct from bullets that are merely not yet
@@ -88,10 +101,12 @@ _CATEGORY_ORDER: list[str] = [
     "security-and-access-boundaries",
     "lot-and-certification-traceability",
     "data-quality-and-integrity",
+    "semantic-duplicate-detection",
     "backup-recovery-and-change-management",
     "schema-design-and-normalization-boundaries",
     "jsonb-structure-and-governance",
     "scale-and-growth-readiness",
+    "storage-health-and-maintenance",
     "indexing-strategy",
     "query-patterns-and-application-interaction",
     "full-text-and-structured-search-behavior",

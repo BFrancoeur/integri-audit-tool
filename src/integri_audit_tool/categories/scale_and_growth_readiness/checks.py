@@ -1,9 +1,9 @@
 """Interprets category-7 catalog/statistics queries into Finding objects.
 
 One function per rubric checklist bullet (see postgres-database-audit-rubric.md,
-"7. Scale & Growth Readiness") — all five turn out to be assessable from
-read-only catalog/statistics access, no row sampling needed. Each takes a
-live connection + config and returns zero or more Findings. Kept separate
+"7. Scale & Growth Readiness") — all three remaining bullets are assessable
+from read-only catalog/statistics access, no row sampling needed. Each takes
+a live connection + config and returns zero or more Findings. Kept separate
 from queries.py so this interpretation logic is unit-testable against canned
 row data without a live database.
 """
@@ -18,7 +18,6 @@ from integri_audit_tool.models import Finding, Severity
 from . import queries
 
 _HIGH_SLOW_QUERY_MS = 5000
-_HIGH_BLOAT_RATIO = 0.5
 
 
 def _pg_stat_statements_unavailable_finding(check_slug: str, bullet_summary: str) -> Finding:
@@ -129,73 +128,6 @@ def check_tenant_columns_without_rls(conn: psycopg.Connection, config: AuditConf
                 recommended_direction=(
                     "Consider enabling row-level security with a policy scoped to the tenant column as a "
                     "database-enforced backstop, not just an application-layer convention."
-                ),
-            )
-        )
-    return findings
-
-
-def check_high_bloat_tables_without_tuning(conn: psycopg.Connection, config: AuditConfig) -> list[Finding]:
-    """Rubric 07.04 — is autovacuum tuned for the table's write/update pattern, or left at defaults?"""
-    findings = []
-    for row in queries.fetch_high_bloat_tables_without_tuning(conn):
-        ratio = row["dead_tuple_ratio"]
-        severity = Severity.HIGH if ratio >= _HIGH_BLOAT_RATIO else Severity.MEDIUM
-        findings.append(
-            Finding(
-                check_slug="high-bloat-tables-without-tuning",
-                title=f"High dead-tuple ratio on default autovacuum settings: {row['table_name']} ({ratio:.0%})",
-                severity=severity,
-                observation=(
-                    f"{row['schema_name']}.{row['table_name']} has ~{row['n_dead_tup']} dead tuples "
-                    f"against ~{row['n_live_tup']} live rows ({ratio:.0%}) and has no per-table "
-                    "autovacuum overrides — it's running on cluster-wide defaults."
-                ),
-                evidence=(
-                    "From pg_stat_user_tables + pg_class.reloptions. Can't detect cluster-wide ALTER "
-                    "SYSTEM tuning this way, only per-table overrides."
-                ),
-                business_impact=(
-                    "Bloat this high means autovacuum isn't keeping pace with this table's write/update "
-                    "volume, which degrades index efficiency and can eventually trigger emergency "
-                    "autovacuum-to-prevent-wraparound at the worst possible time."
-                ),
-                recommended_direction=(
-                    "Lower autovacuum_vacuum_scale_factor / autovacuum_vacuum_cost_delay for this "
-                    "specific table (via ALTER TABLE ... SET) rather than relying on defaults tuned for "
-                    "an average table."
-                ),
-            )
-        )
-    return findings
-
-
-def check_large_jsonb_on_hot_tables(conn: psycopg.Connection, config: AuditConfig) -> list[Finding]:
-    """Rubric 07.05 — are large JSONB documents causing TOAST-related overhead on frequently-accessed rows?"""
-    findings = []
-    for row in queries.fetch_large_jsonb_on_hot_tables(conn):
-        findings.append(
-            Finding(
-                check_slug="large-jsonb-on-hot-tables",
-                title=f"Significant TOAST storage on a frequently-accessed table: {row['table_name']}",
-                severity=Severity.MEDIUM,
-                observation=(
-                    f"{row['schema_name']}.{row['table_name']} has a JSONB column and "
-                    f"{_format_bytes(row['toast_bytes'])} of TOAST (out-of-line) storage, on a table "
-                    f"accessed ~{row['access_count']} times (index + sequential scans)."
-                ),
-                evidence=(
-                    "Measured directly via pg_total_relation_size() on the table's TOAST relation, not "
-                    "inferred from pg_stats — average-width estimates shrink once a value is actually "
-                    "TOASTed (down to a pointer), so they can't reliably detect this."
-                ),
-                business_impact=(
-                    "Values large enough to be stored out-of-line require an extra fetch to detoast on "
-                    "every access — real, repeated I/O cost on a table that's actually being read regularly."
-                ),
-                recommended_direction=(
-                    "Consider whether the full document needs to be fetched on every read, or whether a "
-                    "narrower projection / separate summary column would avoid detoasting on the hot path."
                 ),
             )
         )

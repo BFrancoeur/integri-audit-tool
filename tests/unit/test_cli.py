@@ -130,6 +130,18 @@ def test_write_text_atomically_leaves_existing_file_untouched_if_the_swap_fails(
     assert target.read_text(encoding="utf-8") == "original content"
 
 
+def test_preflight_defaults_to_enabled():
+    param = inspect.signature(cli.run).parameters["preflight"]
+    assert param.default.default is True
+
+
+def test_interactive_defaults_to_none_for_tty_autodetection():
+    """None (not True/False) is the sentinel meaning "auto-detect from the
+    terminal", same pattern as --progress."""
+    param = inspect.signature(cli.run).parameters["interactive"]
+    assert param.default.default is None
+
+
 def test_analytics_defaults_to_disabled():
     """Analytics is opt-in: it persists database identity, client name, and
     finding text in a plaintext SQLite file, so a real client audit should
@@ -288,3 +300,78 @@ def test_acquire_connection_ssh_path_prints_success_and_builds_target_label(mock
         assert target_label == "10.0.0.5:5432/synthetic_client"
 
     cli.db_login.prompt_for_db_login.assert_called_once_with(default_host="127.0.0.1", default_port=54321)
+
+
+class _FakeCursor:
+    def __init__(self, results):
+        self._results = iter(results)
+
+    def execute(self, *a, **k):
+        pass
+
+    def fetchone(self):
+        return next(self._results, None)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+class _FakeConn:
+    """Yields one fetchone() result per cursor.execute() call, in order:
+    version() then the pg_available_extensions lookup."""
+
+    def __init__(self, results):
+        self._results = results
+
+    def cursor(self):
+        return _FakeCursor(self._results)
+
+
+def test_run_preflight_proceeds_when_replica_is_available(mocker):
+    conn = _FakeConn([("PostgreSQL 16.1",), (1,)])
+    console = Console(stderr=True)
+    # read-access confirmed, replica available -- STOP CONDITION never reached.
+    mocker.patch.object(cli, "prompt_attestation", side_effect=[(True, None), (True, None)])
+
+    cli._run_preflight(conn, console)  # must not raise
+
+    assert cli.prompt_attestation.call_count == 2
+
+
+def test_run_preflight_aborts_when_no_replica_and_no_signoff(mocker):
+    conn = _FakeConn([("PostgreSQL 16.1",), (1,)])
+    console = Console(stderr=True)
+    # read-access confirmed, no replica, sign-off declined.
+    mocker.patch.object(cli, "prompt_attestation", side_effect=[(True, None), (False, None), (False, None)])
+
+    with pytest.raises(typer.Exit):
+        cli._run_preflight(conn, console)
+
+
+def test_run_preflight_proceeds_when_signoff_given_with_authorizer(mocker):
+    conn = _FakeConn([("PostgreSQL 16.1",), (1,)])
+    console = Console(stderr=True)
+    mocker.patch.object(
+        cli, "prompt_attestation", side_effect=[(True, None), (False, None), (True, "Jane Smith")]
+    )
+
+    cli._run_preflight(conn, console)  # must not raise
+
+    # The final call is the sign-off prompt, and it must have required an authorizer name.
+    last_call_kwargs = cli.prompt_attestation.call_args_list[-1].kwargs
+    assert last_call_kwargs["require_authorizer_name"] is True
+
+
+def test_run_preflight_reports_pgstattuple_unavailable(mocker):
+    conn = _FakeConn([("PostgreSQL 16.1",), None])  # pgstattuple not found
+    console = mocker.Mock()
+    console.print = mocker.Mock()
+    mocker.patch.object(cli, "prompt_attestation", side_effect=[(True, None), (True, None)])
+
+    cli._run_preflight(conn, console)
+
+    printed = " ".join(str(call.args[0]) for call in console.print.call_args_list)
+    assert "NOT available" in printed

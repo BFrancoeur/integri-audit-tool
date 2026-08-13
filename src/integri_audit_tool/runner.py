@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import psycopg
 
 from integri_audit_tool import registry
+from integri_audit_tool.attestation import prompt_attestation
 from integri_audit_tool.config import AuditConfig
 from integri_audit_tool.models import AuditReport, CategoryResult, CheckResult, Finding
 from integri_audit_tool.reporter import AuditReporter, NullReporter
@@ -28,6 +29,48 @@ def _display_check_id(category_number: int, rubric_bullet: int) -> str:
 
 def _matches_check_filter(check: "registry.Check", check_id: str, check_filter: set[str] | None) -> bool:
     return check_filter is None or check.slug in check_filter or check_id in check_filter
+
+
+def _apply_attestation(
+    check: "registry.Check", check_findings: list[Finding], config: AuditConfig
+) -> list[Finding]:
+    """Annotates (never drops) every finding that needs human confirmation.
+    Only prompts when both the check opted in (interactive=True) and the run
+    itself is interactive (config.interactive) -- a non-interactive run ships
+    every requires_attestation finding with attestation_outcome left at None,
+    which the report renders as "requires manual attestation" rather than
+    silently confirming or dropping it. Called after the check's savepoint
+    has already closed (see run_audit's per-check loop) -- never call this
+    while a transaction is open, per attestation.py's module docstring."""
+    if not check.interactive or not config.interactive:
+        return check_findings
+
+    attested = []
+    for finding in check_findings:
+        if not finding.requires_attestation:
+            attested.append(finding)
+            continue
+        confirmed, authorizer_name = prompt_attestation(
+            finding.title, require_authorizer_name=check.requires_authorizer_name
+        )
+        attested.append(
+            dataclasses.replace(
+                finding,
+                attestation_outcome="confirmed" if confirmed else "rejected",
+                attested_by=authorizer_name,
+            )
+        )
+    return attested
+
+
+def _visible_findings(findings: list[Finding]) -> list[Finding]:
+    """Excludes findings a human attestation step explicitly rejected (e.g. a
+    fuzzy-match duplicate candidate the auditor confirmed was a false
+    positive) -- a rejected candidate isn't a real finding and must never
+    reach the client-facing report or completeness counts. Everything else
+    (confirmed, or not yet attested) stays visible; the report renderer marks
+    the not-yet-attested case explicitly rather than hiding it."""
+    return [f for f in findings if f.attestation_outcome != "rejected"]
 
 
 def run_audit(
@@ -79,7 +122,7 @@ def run_audit(
 
         reporter.category_ready(category, checks_to_run)
 
-        if category.applicability is not None and not category.applicability(conn):
+        if category.applicability is not None and not category.applicability(conn, config):
             reason = "Category does not apply to this database (applicability check returned False)."
             reporter.category_not_applicable(category, reason)
             result = CategoryResult(
@@ -114,15 +157,20 @@ def run_audit(
                         )
                         for finding in check.fn(conn, config)
                     ]
+                # Attestation prompting happens here, deliberately outside the
+                # transaction block above (its savepoint has already closed) —
+                # see _apply_attestation's docstring for why.
+                check_findings = _apply_attestation(check, check_findings, config)
                 findings.extend(check_findings)
                 reporter.check_succeeded(category, check, check_findings)
+                visible_findings = _visible_findings(check_findings)
                 check_results.append(
                     CheckResult(
                         check_id=check_id,
                         check_slug=check.slug,
                         description=check.description,
-                        status="findings" if check_findings else "passed",
-                        finding_count=len(check_findings),
+                        status="findings" if visible_findings else "passed",
+                        finding_count=len(visible_findings),
                     )
                 )
             except Exception as exc:  # noqa: BLE001 - one bad check must not abort the run

@@ -17,12 +17,12 @@ def test_is_applicable_true_when_tsvector_columns_exist(mocker):
         "fetch_tsvector_columns",
         return_value=[{"schema_name": "public", "table_name": "articles", "column_name": "search_vector"}],
     )
-    assert checks.is_applicable(conn=object()) is True
+    assert checks.is_applicable(conn=object(), config=object()) is True
 
 
 def test_is_applicable_false_when_no_tsvector_columns(mocker):
     mocker.patch.object(checks.queries, "fetch_tsvector_columns", return_value=[])
-    assert checks.is_applicable(conn=object()) is False
+    assert checks.is_applicable(conn=object(), config=object()) is False
 
 
 def test_check_missing_fulltext_index_flags_unindexed_column(mocker):

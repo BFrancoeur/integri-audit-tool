@@ -1,8 +1,6 @@
 """Rubric category 7: Scale & Growth Readiness.
 
-All 5 of the rubric's checklist bullets are implemented — the first category
-where every bullet turned out to be assessable from read-only catalog/
-statistics access:
+3 of the rubric's 5 original checklist bullets remain here:
 - 07.01 measured slow queries (pg_stat_statements — degrades to
   Informational if not installed)
 - 07.02 current table/index footprint (pg_total_relation_size —
@@ -12,10 +10,14 @@ statistics access:
 - 07.03 tenant-shaped columns without row-level security enabled
   (pg_class.relrowsecurity — heuristic name match, doesn't prove isolation
   is actually broken, only that the DB-level backstop isn't engaged)
-- 07.04 high dead-tuple bloat with no per-table autovacuum tuning
-  (pg_stat_user_tables + pg_class.reloptions)
-- 07.05 large JSONB values likely causing TOAST overhead on a
-  frequently-accessed table (pg_stats.avg_width + scan counts)
+
+**Moved (SOP merge, 2026-08-03):** 07.04 (autovacuum tuning vs. bloat) and
+07.05 (TOAST overhead from large values, widened beyond JSONB-only) moved to
+the new `storage-health-and-maintenance` category, alongside new index-bloat,
+TOAST-storage-strategy, autovacuum-disabled, and xmin-horizon checks that
+belong with them conceptually. This category now focuses purely on capacity/
+growth-trajectory questions (is anything measurably slow now, how big is the
+footprint, is tenant isolation engaged) rather than storage/vacuum health.
 
 No `applicability` — every database has tables, so this category is never N/A.
 """
@@ -45,18 +47,6 @@ CATEGORY = CategoryModule(
             rubric_bullet=3,
             description="Does the architecture isolate tenant/category data access patterns?",
             fn=checks.check_tenant_columns_without_rls,
-        ),
-        Check(
-            slug="high-bloat-tables-without-tuning",
-            rubric_bullet=4,
-            description="Is autovacuum tuned for the table's write/update pattern, or left at defaults on a high-churn table?",
-            fn=checks.check_high_bloat_tables_without_tuning,
-        ),
-        Check(
-            slug="large-jsonb-on-hot-tables",
-            rubric_bullet=5,
-            description="Are large JSONB documents causing TOAST-related overhead on frequently-accessed rows?",
-            fn=checks.check_large_jsonb_on_hot_tables,
         ),
     ],
 )
