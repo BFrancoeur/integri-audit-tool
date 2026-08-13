@@ -1,8 +1,8 @@
 # Integri Audit Tool
 
-A read-only diagnostic tool for auditing client Postgres databases — security posture, lot/certification traceability, data quality, backup/recovery, schema design, JSONB governance, scale readiness, indexing, query patterns, search behavior, monitoring, and documentation.
+A read-only diagnostic tool for auditing client Postgres databases — security posture, lot/certification traceability, data quality, semantic duplicate detection, backup/recovery, schema design, JSONB governance, scale readiness, storage health, indexing, query patterns, search behavior, monitoring, and documentation.
 
-It automates 12 categories of the Postgres Database & Search Audit Rubric (maintained separately in the `pi-docs` project), ordered by business impact, connecting to a target database with read-only access and producing a findings report scoped and formatted per that rubric. A 13th, final category — Out of Scope — isn't a rubric checklist to run at all; it consolidates every domain this audit deliberately doesn't cover into one place in every report.
+It automates 14 categories of the Postgres Database & Search Audit Rubric (maintained separately in the `pi-docs` project), ordered by business impact, connecting to a target database with read-only access and producing a findings report scoped and formatted per that rubric. A 15th, final category — Out of Scope — isn't a rubric checklist to run at all; it consolidates every domain this audit deliberately doesn't cover into one place in every report.
 
 ## What it does
 
@@ -77,7 +77,7 @@ scripts/run-category.sh 1          # run every check in category 1
 ```
 Each forwards any extra arguments to `integri-audit run`, so `--dsn`/`--output`/etc. still work to override `$INTEGRI_DSN`. There's deliberately no "run everything unattended" script yet — that's later work, once individual checks have been manually exercised enough to trust automating them.
 
-For quicker manual runs, `scripts/aliases.sh` defines a terse, category-relevant alias per rubric category (`ia-schema`, `ia-jsonb`, `ia-index`, `ia-fts`, `ia-query`, `ia-quality`, `ia-scale`, `ia-sec`, `ia-backup`, `ia-mon`, `ia-docs`) — each just forwards to `run-category.sh <N>` (and any extra args, e.g. `ia-sec --no-pdf`). Unlike the scripts above, this file must be **sourced**, not executed, since `alias` only affects the current shell:
+For quicker manual runs, `scripts/aliases.sh` defines a terse, category-relevant alias per rubric category (`ia-sec`, `ia-lot`, `ia-quality`, `ia-dedup`, `ia-backup`, `ia-schema`, `ia-jsonb`, `ia-scale`, `ia-storage`, `ia-index`, `ia-query`, `ia-fts`, `ia-mon`, `ia-docs`, `ia-oos`) — each just forwards to `run-category.sh <N>` (and any extra args, e.g. `ia-sec --no-pdf`). Unlike the scripts above, this file must be **sourced**, not executed, since `alias` only affects the current shell:
 
 ```bash
 source scripts/aliases.sh                                       # for the current shell session
@@ -95,17 +95,21 @@ Integri Audit Tool — per-category aliases (each forwards extra args to 'integr
 
   Alias       Category
   -----       --------
-  ia-schema   1. Schema Design & Normalization Boundaries
-  ia-jsonb    2. JSONB Structure & Governance
-  ia-index    3. Indexing Strategy
-  ia-fts      4. Full-Text & Structured Search Behavior
-  ia-query    5. Query Patterns & Application Interaction
-  ia-quality  6. Data Quality & Integrity
-  ia-scale    7. Scale & Growth Readiness
-  ia-sec      8. Security & Access Boundaries
-  ia-backup   9. Backup, Recovery & Change Management
-  ia-mon      10. Monitoring & Observability
-  ia-docs     11. Documentation & Institutional Knowledge
+  ia-sec      1. Security & Access Boundaries
+  ia-lot      2. Lot & Certification Traceability
+  ia-quality  3. Data Quality & Integrity
+  ia-dedup    4. Semantic Duplicate Detection
+  ia-backup   5. Backup, Recovery & Change Management
+  ia-schema   6. Schema Design & Normalization Boundaries
+  ia-jsonb    7. JSONB Structure & Governance
+  ia-scale    8. Scale & Growth Readiness
+  ia-storage  9. Storage Health & Maintenance
+  ia-index    10. Indexing Strategy
+  ia-query    11. Query Patterns & Application Interaction
+  ia-fts      12. Full-Text & Structured Search Behavior
+  ia-mon      13. Monitoring & Observability
+  ia-docs     14. Documentation & Institutional Knowledge
+  ia-oos      15. Out of Scope
 
   ia-db-up    Set up/reuse the synthetic test database, auto-exports INTEGRI_DSN
   ia-db-down  Tear down the synthetic test database
@@ -195,7 +199,7 @@ uv run pytest -m integration   # + integration tests against a real Postgres (re
   - Two reporters now run side by side on every `run`, combined via `reporter.py`'s `CompositeReporter` (fans every call out to a list of reporters — neither needs to know the other exists): `CliProgressReporter` (optional, terminal-only) and `cli.py`'s `_IncrementalReportWriter` (always on, regardless of `--progress`), which re-renders and overwrites the same report path after every `category_completed` call so the file exists and grows from the first finished category onward, rather than only appearing once the whole audit is done. It deliberately doesn't try to be a true single-pass append — the executive summary, findings table, and remediation phases all need every category's results to compute correctly, so `cli.py` still does one more authoritative `render()` + write after `run_audit()` returns, using the complete `AuditReport` (with correct out-of-scope notes, which the incremental writer omits since they're not fully known until the run finishes). Mid-run reads of the file are honest partial snapshots; only the final write is guaranteed complete.
   - Two real bugs found via live testing, not unit tests (which don't render anything real): (1) Windows consoles often don't default stdout/stderr to UTF-8, so the ✓/✗/em-dashes this feature prints came back as literal escaped text or mangled replacement characters — fixed by reconfiguring both streams to UTF-8 at the top of `cli.py`, before any `rich.Console` is constructed against them. (2) Running a single check via `--check` still announced (and drew an empty 0/N progress bar for) every *other* category, since `category_ready` fired unconditionally — fixed by computing which checks actually match the filter *before* deciding whether to announce a category at all, and skipping categories that contribute nothing under the filter without even evaluating their `applicability()` (avoids a wasted DB round-trip for a category that was never going to run anything).
   - The per-category progress bars (`rich.progress.Progress`) were later removed entirely, also found via live testing: `Progress` renders as a persistent, self-redrawing region that interleaves unpredictably with the plain `console.print()` calls used for readiness/check/finding lines — in practice category 1's completed bar rendered *after* category 2's readiness message had already printed. Since every check and its findings are already printed line by line, the bar was redundant on top of being visually broken; `CliProgressReporter` now tracks "was this category announced" with a plain `set[int]` instead of a `dict[int, TaskID]`, and there's no live-rendering region left to race against sequential prints.
-- **All 12 automatable rubric categories are now implemented**, each covered by unit tests, live-Postgres integration tests, and a manual CLI run: **Security & Access Boundaries**, **Lot & Certification Traceability**, **Data Quality & Integrity**, **Backup, Recovery & Change Management**, **Schema Design & Normalization Boundaries**, **JSONB Structure & Governance**, **Scale & Growth Readiness** (the only category with zero deferred/out-of-scope bullets), **Indexing Strategy**, **Query Patterns & Application Interaction**, **Full-Text & Structured Search Behavior**, **Monitoring & Observability**, and **Documentation & Institutional Knowledge** — displayed category numbers are intentionally not repeated here since they're computed from `_CATEGORY_ORDER` (`registry.py`) and can change; see `list-checks` for current numbering. Compliance & Data Privacy and Network & Authentication Testing are out of scope by design (see the Out of Scope category, README intro). Next work on this tool is either filling in each category's remaining deferred bullets, or moving on to something beyond the rubric.
+- **All 14 automatable rubric categories are now implemented**, each covered by unit tests, live-Postgres integration tests, and a manual CLI run: **Security & Access Boundaries**, **Lot & Certification Traceability**, **Data Quality & Integrity**, **Semantic Duplicate Detection**, **Backup, Recovery & Change Management**, **Schema Design & Normalization Boundaries**, **JSONB Structure & Governance**, **Scale & Growth Readiness** (the only category with zero deferred/out-of-scope bullets), **Storage Health & Maintenance**, **Indexing Strategy**, **Query Patterns & Application Interaction**, **Full-Text & Structured Search Behavior**, **Monitoring & Observability**, and **Documentation & Institutional Knowledge** — displayed category numbers are intentionally not repeated here since they're computed from `_CATEGORY_ORDER` (`registry.py`) and can change; see `list-checks` for current numbering. Compliance & Data Privacy and Network & Authentication Testing are out of scope by design (see the Out of Scope category, README intro). Next work on this tool is either filling in each category's remaining deferred bullets, or moving on to something beyond the rubric.
 - **Lot & Certification Traceability** is a new category, not one of the original 11 — nothing else in the rubric asks about lot/heat/batch/serial traceability tied to certification records (Fastener Quality Act and similar regulated-industry requirements for this tool's actual target buyer). Its four checks each reuse an already-proven heuristic mechanism from an existing category, just re-scoped to lot/cert-shaped naming, rather than inventing a new detection approach: null-fraction (Data Quality's high-null-fraction-columns), FK-shaped-column-without-constraint (Schema Design's missing-foreign-keys), near-uniqueness (Data Quality's near-unique-columns-without-constraint, done here as an exact `GROUP BY`/`HAVING` rather than a `pg_stats` estimate, since itemizing the actual duplicate values needs precision an estimate can't give), and JSONB-without-validation (JSONB Structure's missing-validation-layer). Unlike most categories, its findings name the *specific* affected lot/serial values (capped, with a total count when truncated) rather than only a count or percentage — this data is high-stakes for suppliers and their buyers, so "meaningful to the client" means naming names. One real bug caught via live testing, not unit tests: the orphaned-link check's row sample could include rows missing *both* the lot number and the certification link, rendering as a literal `"None"` in a client-facing finding — fixed by excluding rows with no lot number to report in the first place (that row is already covered by the poorly-populated-column finding), not just leaving them uncounted.
 - **The Tests Performed report section** exists because the live progress UI already showed which tests passed cleanly, not just which findings turned up — but that outcome was never persisted onto the report itself, only ever printed to the terminal and then lost. Backed by a new `CheckResult` (status: passed/findings/error, plus finding count) that `runner.py` stamps for every check right where it already calls `reporter.check_succeeded`/`check_failed`, so no new data collection was needed, just capturing what was already being observed.
 - Category 11 closes a loop left open in category 2: 02.01 (a governing schema/registry for JSONB keys) was deferred there as follow-up work; category 11's 11.03 is that follow-up, asked from the institutional-knowledge angle instead — same underlying signal (a heuristically-named registry table), different rubric bullet. 11.02 is deliberately broader than category 8's 08.04 (which only checks PII-*named* columns for missing comments): 11.02 checks *every* JSONB column, since the rubric bullet here is about documenting an architectural choice (why JSONB), not flagging sensitive data.
