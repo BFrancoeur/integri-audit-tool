@@ -6,6 +6,12 @@ def _category(slug: str, checks: list[Check] | None = None) -> CategoryModule:
     return CategoryModule(slug=slug, name=slug, checks=checks or [])
 
 
+def test_check_interactive_fields_default_to_false():
+    check = Check(slug="a", rubric_bullet=1, description="d", fn=lambda conn, cfg: [])
+    assert check.interactive is False
+    assert check.requires_authorizer_name is False
+
+
 def test_stamp_category_numbers_assigns_position_in_order():
     a = _category("a")
     b = _category("b")
@@ -48,10 +54,10 @@ def test_stamp_category_numbers_raises_when_order_lists_a_category_never_discove
         assert "ghost" in str(exc)
 
 
-def test_discover_categories_returns_all_13_sorted_by_number():
+def test_discover_categories_returns_all_15_sorted_by_number():
     found = registry.discover_categories()
     numbers = [c.number for c in found]
-    assert numbers == list(range(1, 14))
+    assert numbers == list(range(1, 16))
 
 
 def test_lot_and_certification_traceability_category_has_expected_checks_and_applicability():
@@ -84,7 +90,13 @@ def test_schema_design_category_has_expected_checks_and_out_of_scope():
     schema_design = categories["schema-design-and-normalization-boundaries"]
     assert schema_design.name == "Schema Design & Normalization Boundaries"
     check_slugs = {c.slug for c in schema_design.checks}
-    assert check_slugs == {"missing-foreign-keys", "schema-drift", "primary-key-consistency"}
+    assert check_slugs == {
+        "structured-data-stored-as-text",
+        "missing-foreign-keys",
+        "schema-drift",
+        "primary-key-consistency",
+        "repeating-column-groups",
+    }
     assert any("bullet 1" in note for note in schema_design.out_of_scope)
     assert any("bullet 3" in note for note in schema_design.out_of_scope)
 
@@ -94,7 +106,15 @@ def test_indexing_strategy_category_has_expected_checks():
     indexing = categories["indexing-strategy"]
     assert indexing.name == "Indexing Strategy"
     check_slugs = {c.slug for c in indexing.checks}
-    assert check_slugs == {"unused-indexes", "gin-usage", "redundant-indexes"}
+    assert check_slugs == {
+        "unused-indexes",
+        "gin-usage",
+        "high-selectivity-columns-without-index",
+        "redundant-indexes",
+        "unpromoted-jsonb-range-queries",
+        "excessive-indexing-write-amplification",
+        "underused-partial-indexes",
+    }
 
 
 def test_jsonb_governance_category_has_expected_checks_and_applicability():
@@ -102,7 +122,12 @@ def test_jsonb_governance_category_has_expected_checks_and_applicability():
     jsonb_governance = categories["jsonb-structure-and-governance"]
     assert jsonb_governance.name == "JSONB Structure & Governance"
     check_slugs = {c.slug for c in jsonb_governance.checks}
-    assert check_slugs == {"key-naming-drift", "key-type-inconsistency", "missing-validation-layer"}
+    assert check_slugs == {
+        "key-naming-drift",
+        "key-type-inconsistency",
+        "missing-validation-layer",
+        "orphaned-legacy-keys",
+    }
     assert jsonb_governance.applicability is not None
     assert any("bullet 5" in note for note in jsonb_governance.out_of_scope)
 
@@ -147,15 +172,21 @@ def test_data_quality_category_has_expected_checks():
     check_slugs = {c.slug for c in data_quality.checks}
     assert check_slugs == {
         "high-null-fraction-columns",
+        "malformed-jsonb-entries",
         "unvalidated-foreign-keys",
         "near-unique-columns-without-constraint",
         "never-null-nullable-columns",
         "audit-timestamp-columns-have-nulls",
+        "low-cardinality-ungoverned-columns",
+        "missing-default-on-status-like-columns",
+        "orphaned-rows-on-unvalidated-foreign-keys",
     }
     assert data_quality.applicability is None
 
 
-def test_scale_readiness_category_has_all_5_checks():
+def test_scale_readiness_category_has_all_3_remaining_checks():
+    """high-bloat-tables-without-tuning and large-jsonb-on-hot-tables moved to
+    storage-health-and-maintenance -- see that category's own registry test."""
     categories = {c.slug: c for c in registry.discover_categories()}
     scale_readiness = categories["scale-and-growth-readiness"]
     assert scale_readiness.name == "Scale & Growth Readiness"
@@ -164,11 +195,38 @@ def test_scale_readiness_category_has_all_5_checks():
         "slow-queries",
         "largest-tables",
         "tenant-columns-without-rls",
-        "high-bloat-tables-without-tuning",
-        "large-jsonb-on-hot-tables",
     }
     assert scale_readiness.applicability is None
     assert scale_readiness.out_of_scope == []
+
+
+def test_semantic_duplicate_detection_category_has_expected_checks_and_applicability():
+    categories = {c.slug: c for c in registry.discover_categories()}
+    dedup = categories["semantic-duplicate-detection"]
+    assert dedup.name == "Semantic Duplicate Detection"
+    check_slugs = {c.slug for c in dedup.checks}
+    assert check_slugs == {"exact-match-duplicates", "fuzzy-match-duplicates"}
+    assert dedup.applicability is not None
+    fuzzy_check = next(c for c in dedup.checks if c.slug == "fuzzy-match-duplicates")
+    assert fuzzy_check.interactive is True
+
+
+def test_storage_health_and_maintenance_category_has_all_7_checks():
+    categories = {c.slug: c for c in registry.discover_categories()}
+    storage_health = categories["storage-health-and-maintenance"]
+    assert storage_health.name == "Storage Health & Maintenance"
+    check_slugs = {c.slug for c in storage_health.checks}
+    assert check_slugs == {
+        "table-bloat",
+        "index-bloat",
+        "index-to-table-size-ratio",
+        "large-toast-on-hot-tables",
+        "toast-storage-strategy",
+        "autovacuum-explicitly-disabled",
+        "xmin-horizon-risk",
+    }
+    assert storage_health.applicability is None
+    assert storage_health.out_of_scope == []
 
 
 def test_security_boundaries_category_has_expected_checks_and_out_of_scope():
@@ -182,6 +240,7 @@ def test_security_boundaries_category_has_expected_checks_and_out_of_scope():
         "undocumented-pii-and-ssl",
         "audit-trail-availability",
         "superuser-roles-without-expiration",
+        "authentication-method-strength",
     }
     assert security.applicability is None
     assert any("bullet 3" in note for note in security.out_of_scope)

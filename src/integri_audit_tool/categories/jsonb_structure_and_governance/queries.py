@@ -20,6 +20,18 @@ from psycopg.rows import dict_row
 SAMPLE_ROW_LIMIT = 5000
 """Cap on rows scanned per JSONB column, to bound cost on large tables."""
 
+MIN_SAMPLE_SIZE_FOR_RARE_KEY_CHECK = 50
+"""Below this many non-null sampled rows, an "occurs in X% of rows" rarity
+signal is too noisy to be worth flagging -- a key that appears in 1 of 5
+sampled rows isn't meaningfully "rare," it's just a small sample."""
+
+MAX_RARE_KEY_OCCURRENCE_FRACTION = 0.02
+"""A key present in this fraction of sampled rows or fewer looks like it
+stopped being written by a deprecated feature rather than being a normal,
+sparsely-populated attribute -- low enough to avoid flagging ordinary
+optional fields, high enough to catch genuine "used in the past, abandoned
+since" keys."""
+
 _JSONB_COLUMNS_SQL = """
     SELECT
         c.table_schema AS schema_name,
@@ -113,6 +125,57 @@ def fetch_key_naming_variants(
     )
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(query, {"sample_limit": SAMPLE_ROW_LIMIT})
+        return cur.fetchall()
+
+
+def fetch_rare_jsonb_keys(
+    conn: psycopg.Connection, schema_name: str, table_name: str, column_name: str
+) -> list[dict]:
+    """Flags top-level keys that occur in only a small fraction of sampled
+    non-null rows -- a statistical-rarity heuristic for orphaned/legacy keys
+    left behind by a deprecated feature, the same shape as
+    data_quality_and_integrity's null_frac-based checks applied to key
+    presence instead of column nullness."""
+    query = sql.SQL(
+        """
+        WITH sample AS (
+            SELECT {column} AS doc
+            FROM {schema}.{table}
+            WHERE {column} IS NOT NULL
+            LIMIT %(sample_limit)s
+        ),
+        sample_size AS (
+            SELECT count(*) AS total FROM sample
+        ),
+        key_occurrences AS (
+            SELECT k.key_name, count(*) AS occurrence_count
+            FROM sample
+            CROSS JOIN LATERAL jsonb_object_keys(sample.doc) AS k(key_name)
+            GROUP BY k.key_name
+        )
+        SELECT
+            key_occurrences.key_name,
+            key_occurrences.occurrence_count,
+            sample_size.total AS sample_size
+        FROM key_occurrences, sample_size
+        WHERE sample_size.total >= %(min_sample_size)s
+          AND key_occurrences.occurrence_count::numeric / sample_size.total <= %(max_rare_key_fraction)s
+        ORDER BY key_occurrences.occurrence_count::numeric / sample_size.total ASC;
+        """
+    ).format(
+        column=sql.Identifier(column_name),
+        schema=sql.Identifier(schema_name),
+        table=sql.Identifier(table_name),
+    )
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            query,
+            {
+                "sample_limit": SAMPLE_ROW_LIMIT,
+                "min_sample_size": MIN_SAMPLE_SIZE_FOR_RARE_KEY_CHECK,
+                "max_rare_key_fraction": MAX_RARE_KEY_OCCURRENCE_FRACTION,
+            },
+        )
         return cur.fetchall()
 
 

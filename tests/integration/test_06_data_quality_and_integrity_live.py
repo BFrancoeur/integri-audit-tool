@@ -100,3 +100,103 @@ def test_fetch_audit_timestamp_column_null_fractions_detects_gaps(pg_conn):
     assert row is not None
     assert row["column_name"] == "created_at"
     assert row["null_frac"] == pytest.approx(0.3, abs=0.05)
+
+
+def test_fetch_low_cardinality_ungoverned_columns_distinguishes_governed_column(pg_conn):
+    with pg_conn.cursor() as cur:
+        cur.execute("CREATE TABLE c6_ungoverned_orders (id serial PRIMARY KEY, status text)")
+        cur.execute(
+            "INSERT INTO c6_ungoverned_orders (status) "
+            "SELECT (ARRAY['pending','shipped','delivered'])[1 + (g % 3)] FROM generate_series(1, 100) g"
+        )
+        cur.execute(
+            "CREATE TABLE c6_governed_orders (id serial PRIMARY KEY, status text "
+            "CHECK (status IN ('pending','shipped','delivered')))"
+        )
+        cur.execute(
+            "INSERT INTO c6_governed_orders (status) "
+            "SELECT (ARRAY['pending','shipped','delivered'])[1 + (g % 3)] FROM generate_series(1, 100) g"
+        )
+        cur.execute("ANALYZE c6_ungoverned_orders")
+        cur.execute("ANALYZE c6_governed_orders")
+
+    rows = queries.fetch_low_cardinality_ungoverned_columns(pg_conn)
+
+    assert any(r["table_name"] == "c6_ungoverned_orders" and r["column_name"] == "status" for r in rows)
+    assert not any(r["table_name"] == "c6_governed_orders" for r in rows)
+
+
+def test_fetch_missing_default_on_status_like_columns_distinguishes_defaulted_column(pg_conn):
+    with pg_conn.cursor() as cur:
+        cur.execute("CREATE TABLE c6_accounts_no_default (id serial PRIMARY KEY, is_active boolean NOT NULL)")
+        cur.execute(
+            "CREATE TABLE c6_accounts_with_default (id serial PRIMARY KEY, "
+            "is_active boolean NOT NULL DEFAULT true)"
+        )
+
+    rows = queries.fetch_missing_default_on_status_like_columns(pg_conn)
+
+    assert any(r["table_name"] == "c6_accounts_no_default" and r["column_name"] == "is_active" for r in rows)
+    assert not any(r["table_name"] == "c6_accounts_with_default" for r in rows)
+
+
+def test_fetch_unvalidated_fk_detail_and_orphaned_child_rows(pg_conn):
+    with pg_conn.cursor() as cur:
+        cur.execute("CREATE TABLE c6_orphan_parents (id serial PRIMARY KEY)")
+        cur.execute("INSERT INTO c6_orphan_parents (id) VALUES (1), (2)")
+        cur.execute("CREATE TABLE c6_orphan_children (id serial PRIMARY KEY, parent_id int)")
+        # Insert an orphaned reference *before* adding the constraint --
+        # NOT VALID is exactly what lets this coexist with a constraint that
+        # would otherwise reject it.
+        cur.execute("INSERT INTO c6_orphan_children (parent_id) VALUES (1), (2), (999)")
+        cur.execute(
+            "ALTER TABLE c6_orphan_children ADD CONSTRAINT c6_orphan_children_parent_fk "
+            "FOREIGN KEY (parent_id) REFERENCES c6_orphan_parents(id) NOT VALID"
+        )
+
+    detail_rows = queries.fetch_unvalidated_fk_detail(pg_conn)
+    detail = next((r for r in detail_rows if r["conname"] == "c6_orphan_children_parent_fk"), None)
+    assert detail is not None
+    assert detail["child_column"] == "parent_id"
+    assert detail["parent_table"] == "c6_orphan_parents"
+    assert detail["parent_column"] == "id"
+
+    orphaned_values = queries.fetch_orphaned_child_rows(
+        pg_conn,
+        detail["schema_name"],
+        detail["table_name"],
+        detail["child_column"],
+        detail["parent_schema"],
+        detail["parent_table"],
+        detail["parent_column"],
+    )
+    assert orphaned_values == [999]
+
+
+def test_fetch_empty_jsonb_document_stats_counts_empty_documents(pg_conn):
+    with pg_conn.cursor() as cur:
+        cur.execute("CREATE TABLE c6_jsonb_docs (id serial PRIMARY KEY, attributes jsonb)")
+        cur.execute(
+            "INSERT INTO c6_jsonb_docs (attributes) "
+            "SELECT CASE WHEN g <= 5 THEN '{}'::jsonb ELSE jsonb_build_object('k', g) END "
+            "FROM generate_series(1, 25) g"
+        )
+
+    stats = queries.fetch_empty_jsonb_document_stats(pg_conn, "public", "c6_jsonb_docs", "attributes")
+
+    assert stats["sample_size"] == 25
+    assert stats["empty_count"] == 5
+
+
+def test_fetch_empty_jsonb_document_stats_ignores_non_empty_documents(pg_conn):
+    with pg_conn.cursor() as cur:
+        cur.execute("CREATE TABLE c6_jsonb_docs_clean (id serial PRIMARY KEY, attributes jsonb)")
+        cur.execute(
+            "INSERT INTO c6_jsonb_docs_clean (attributes) "
+            "SELECT jsonb_build_object('k', g) FROM generate_series(1, 25) g"
+        )
+
+    stats = queries.fetch_empty_jsonb_document_stats(pg_conn, "public", "c6_jsonb_docs_clean", "attributes")
+
+    assert stats["sample_size"] == 25
+    assert stats["empty_count"] == 0

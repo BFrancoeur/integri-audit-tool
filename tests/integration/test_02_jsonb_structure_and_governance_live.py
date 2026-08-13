@@ -67,3 +67,30 @@ def test_fetch_key_type_inconsistencies_flags_mixed_types_for_same_key(pg_conn):
     assert row is not None
     assert set(row["observed_types"]) == {"number", "string"}
     assert row["occurrences"] == 2
+
+
+def test_fetch_rare_jsonb_keys_flags_key_below_threshold(pg_conn):
+    with pg_conn.cursor() as cur:
+        cur.execute("CREATE TABLE c2_legacy_docs (id serial PRIMARY KEY, doc jsonb)")
+        cur.execute(
+            "INSERT INTO c2_legacy_docs (doc) "
+            "SELECT jsonb_build_object('common_key', g) FROM generate_series(1, 100) g"
+        )
+        cur.execute("UPDATE c2_legacy_docs SET doc = doc || '{\"legacy_key\": true}'::jsonb WHERE id = 1")
+
+    rows = queries.fetch_rare_jsonb_keys(pg_conn, "public", "c2_legacy_docs", "doc")
+
+    row = next((r for r in rows if r["key_name"] == "legacy_key"), None)
+    assert row is not None
+    assert row["occurrence_count"] == 1
+    assert not any(r["key_name"] == "common_key" for r in rows)
+
+
+def test_fetch_rare_jsonb_keys_skips_when_sample_too_small(pg_conn):
+    with pg_conn.cursor() as cur:
+        cur.execute("CREATE TABLE c2_tiny_docs (id serial PRIMARY KEY, doc jsonb)")
+        cur.execute("INSERT INTO c2_tiny_docs (doc) VALUES ('{\"a\": 1}'), ('{\"a\": 1, \"b\": 2}')")
+
+    rows = queries.fetch_rare_jsonb_keys(pg_conn, "public", "c2_tiny_docs", "doc")
+
+    assert rows == []

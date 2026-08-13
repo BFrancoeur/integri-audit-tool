@@ -17,8 +17,9 @@ from integri_audit_tool.models import Finding, Severity
 from . import queries
 
 
-def is_applicable(conn: psycopg.Connection) -> bool:
-    """Category is N/A when the schema has no JSONB columns at all (per rubric guidance)."""
+def is_applicable(conn: psycopg.Connection, config: AuditConfig) -> bool:
+    """Category is N/A when the schema has no JSONB columns at all (per rubric guidance).
+    config is unused here -- part of the shared applicability signature (see registry.py)."""
     return len(queries.fetch_jsonb_columns(conn)) > 0
 
 
@@ -92,6 +93,46 @@ def check_key_type_inconsistency(conn: psycopg.Connection, config: AuditConfig) 
                     recommended_direction=(
                         "Backfill/normalize this key to a single type, and add write-time validation "
                         "(CHECK constraint, trigger, or application-level schema) going forward."
+                    ),
+                )
+            )
+    return findings
+
+
+def check_orphaned_legacy_keys(conn: psycopg.Connection, config: AuditConfig) -> list[Finding]:
+    """Rubric 02.06 — are there orphaned or legacy keys accumulating from deprecated features?"""
+    findings = []
+    for col in queries.fetch_jsonb_columns(conn):
+        rare_keys = queries.fetch_rare_jsonb_keys(conn, col["schema_name"], col["table_name"], col["column_name"])
+        for row in rare_keys:
+            occurrence_fraction = row["occurrence_count"] / row["sample_size"]
+            findings.append(
+                Finding(
+                    check_slug="orphaned-legacy-keys",
+                    title=(
+                        f"Rarely-populated JSONB key: {col['table_name']}.{col['column_name']}."
+                        f"{row['key_name']}"
+                    ),
+                    severity=Severity.LOW,
+                    observation=(
+                        f"Key '{row['key_name']}' in {col['schema_name']}.{col['table_name']}."
+                        f"{col['column_name']} appears in only {row['occurrence_count']} of "
+                        f"{row['sample_size']} sampled non-null rows (~{occurrence_fraction:.1%})."
+                    ),
+                    evidence=(
+                        f"Sampled up to {queries.SAMPLE_ROW_LIMIT} non-null rows, counted top-level key "
+                        "presence via jsonb_object_keys() — a statistical-rarity heuristic, not proof the "
+                        "key is actually unused; a legitimately sparse but current attribute can look the "
+                        "same."
+                    ),
+                    business_impact=(
+                        "A key this rare is often a leftover from a deprecated feature or migration — "
+                        "left unaddressed, it adds confusion for anyone reverse-engineering the JSONB "
+                        "shape and can mislead future validation/registry work."
+                    ),
+                    recommended_direction=(
+                        "Confirm with the application team whether this key is still actively written; if "
+                        "not, plan a backfill/cleanup and remove it from any documented schema."
                     ),
                 )
             )

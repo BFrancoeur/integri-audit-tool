@@ -1,13 +1,20 @@
 """Rubric category 2: JSONB Structure & Governance.
 
-3 of the rubric's 6 checklist bullets are implemented (02.02, 02.03, 02.04).
+4 of the rubric's 6 checklist bullets are implemented (02.02, 02.03, 02.04, 02.06).
 
 02.01 (a governing schema/registry for JSONB keys) is not follow-up work for
 *this* category — it's superseded by category 11's 11.03, which closes this
 exact loop from the institutional-knowledge angle (same underlying signal: a
-heuristically-named registry table). 02.06 (orphaned/legacy keys) stays
-deferred — a statistical-rarity heuristic, the same shape as category 6's
-06.01/06.05 `null_frac` approach, just not built yet.
+heuristically-named registry table).
+
+**Added (2026-08-08):** 02.06 (`orphaned-legacy-keys`, orphaned/legacy keys
+accumulating from deprecated features) — a statistical-rarity heuristic, the
+same shape as category 6's 06.01/06.05 `null_frac` approach, applied to key
+*presence* within a sampled JSONB column instead of column nullness. Flags a
+top-level key that occurs in only a small fraction of sampled non-null rows;
+doesn't distinguish a genuinely abandoned key from a legitimately sparse but
+still-current one, so it's capped at LOW severity and framed for
+confirmation with the application team, not as a proven finding.
 
 02.05 (nesting depth / brittle query paths) is declared via `out_of_scope`,
 not deferred: the brittleness lives in application query code, not in the
@@ -46,6 +53,12 @@ CATEGORY = CategoryModule(
             rubric_bullet=4,
             description="Is there a validation layer preventing malformed JSONB from being written?",
             fn=checks.check_missing_validation_layer,
+        ),
+        Check(
+            slug="orphaned-legacy-keys",
+            rubric_bullet=6,
+            description="Are there orphaned or legacy keys accumulating from deprecated features?",
+            fn=checks.check_orphaned_legacy_keys,
         ),
     ],
     out_of_scope=[
